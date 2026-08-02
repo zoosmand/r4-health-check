@@ -1,0 +1,93 @@
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+*.lst
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.bin
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# MacOS specialties
+.DS_Store
+
+# Vendor documentation
+doc
+
+# Builds
+build/
+build*/
+
+# Locally provisioned TLS server credentials
+TLS/Private/
+
+# Vendir Sources
+Drivers/
+Middlewares/
+FreeRTOS-Kernel/
+
+# macOS trash
+Core/.DS_Store
+.DS_Store
+
+# Certificates
+*.der
+*.pem
+*.crt
+*.crl
+*.key
+*.pfx
+*.p12
+*.jks
+*.jceks
+*.keystore
+*.p7b
+*.srl
+*.jks
+*.csr
+*.ssh/
