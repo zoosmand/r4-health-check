@@ -201,6 +201,25 @@ bool WifiModem_GetLocalIp(char * ipOut, size_t ipCap)
     return wifiModem_SendCommand("AT+IPSTA=0\r\n", ipOut, ipCap, WIFI_MODEM_RESPONSE_TIMEOUT);
 }
 
+bool WifiModem_GetNetworkTime(uint32_t * epochOut)
+{
+    char payload[16];
+    unsigned long epoch;
+
+    if (epochOut == NULL ||
+        !wifiModem_SendCommand("AT+GETTIME=\r\n", payload, sizeof(payload), WIFI_MODEM_RESPONSE_TIMEOUT)) {
+        return false;
+    }
+
+    epoch = strtoul(payload, NULL, 10);
+    if (epoch == 0UL) {
+        return false;
+    }
+
+    *epochOut = (uint32_t) epoch;
+    return true;
+}
+
 static int32_t wifiModem_SendSocketCommand(const char * command)
 {
     char payload[16];
@@ -300,5 +319,103 @@ void WifiModem_ClientClose(int32_t clientSocket)
     char command[36];
 
     snprintf(command, sizeof(command), "AT+CLIENTCLOSE=%ld\r\n", (long) clientSocket);
+    (void) wifiModem_SendCommand(command, NULL, 0U, WIFI_MODEM_RESPONSE_TIMEOUT);
+}
+
+int32_t WifiModem_SslClientBegin(void)
+{
+    return wifiModem_SendSocketCommand("AT+SSLBEGINCLIENT\r\n");
+}
+
+bool WifiModem_SslClientUseCaBundle(int32_t clientSocket)
+{
+    char command[32];
+
+    snprintf(command, sizeof(command), "AT+SETCAROOT=%ld\r\n", (long) clientSocket);
+    return wifiModem_SendCommand(command, NULL, 0U, WIFI_MODEM_RESPONSE_TIMEOUT);
+}
+
+bool WifiModem_SslClientConnect(int32_t clientSocket, const char * host, uint16_t port,
+                                uint32_t timeoutMs)
+{
+    char command[112];
+
+    if (host == NULL || host[0] == '\0') {
+        return false;
+    }
+
+    snprintf(command, sizeof(command), "AT+SSLCLIENTCONNECT=%ld,%s,%u,%lu\r\n",
+             (long) clientSocket, host, (unsigned int) port, (unsigned long) timeoutMs);
+    return wifiModem_SendCommand(command, NULL, 0U, timeoutMs + WIFI_MODEM_RESPONSE_TIMEOUT);
+}
+
+int32_t WifiModem_SslClientAvailable(int32_t clientSocket)
+{
+    char command[36];
+
+    snprintf(command, sizeof(command), "AT+SSLAVAILABLE=%ld\r\n", (long) clientSocket);
+    return wifiModem_SendSocketCommand(command);
+}
+
+int32_t WifiModem_SslClientRead(int32_t clientSocket, char * dataOut, size_t dataCap)
+{
+    char command[48];
+    char payload[WIFI_MODEM_BUFFER_CAP];
+    const char * dataStart;
+    size_t dataLength;
+
+    if (dataOut == NULL || dataCap < 2U) {
+        return -1;
+    }
+
+    snprintf(command, sizeof(command), "AT+SSLCLIENTRECEIVE=%ld,%u\r\n",
+             (long) clientSocket, (unsigned int) (dataCap - 1U));
+    if (!wifiModem_SendCommand(command, payload, sizeof(payload), WIFI_MODEM_RESPONSE_TIMEOUT)) {
+        return -1;
+    }
+
+    dataStart = strchr(payload, '|');
+    if (dataStart == NULL) {
+        dataOut[0] = '\0';
+        return 0;
+    }
+    dataStart++;
+    if (*dataStart == ' ') {
+        dataStart++;
+    }
+
+    dataLength = strlen(dataStart);
+    if (dataLength >= dataCap) {
+        dataLength = dataCap - 1U;
+    }
+    memcpy(dataOut, dataStart, dataLength);
+    dataOut[dataLength] = '\0';
+    return (int32_t) dataLength;
+}
+
+bool WifiModem_SslClientWrite(int32_t clientSocket, const char * data, size_t dataLength)
+{
+    char command[48];
+
+    if (data == NULL || dataLength == 0U) {
+        return false;
+    }
+
+    wifiModem_DrainRxBuffer();
+    snprintf(command, sizeof(command), "AT+SSLCLIENTSEND=%ld,%u\r\n",
+             (long) clientSocket, (unsigned int) dataLength);
+    WifiUart_WriteString(command);
+    while (dataLength > 0U) {
+        WifiUart_WriteByte((uint8_t) *data++);
+        dataLength--;
+    }
+    return wifiModem_WaitForStatus(WIFI_MODEM_RESPONSE_TIMEOUT);
+}
+
+void WifiModem_SslClientClose(int32_t clientSocket)
+{
+    char command[40];
+
+    snprintf(command, sizeof(command), "AT+SSLCLIENTCLOSE=%ld\r\n", (long) clientSocket);
     (void) wifiModem_SendCommand(command, NULL, 0U, WIFI_MODEM_RESPONSE_TIMEOUT);
 }

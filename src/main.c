@@ -5,7 +5,9 @@
 #include <stdio.h>
 
 #include "Core/Clock/clock.h"
+#include "Core/Rtc/rtc.h"
 #include "Srv/HealthApi/health_api.h"
+#include "Srv/HostCheck/host_check.h"
 #include "Srv/Console/console.h"
 #include "Srv/WifiModem/wifi_credentials.h"
 #include "Srv/WifiModem/wifi_modem.h"
@@ -16,6 +18,7 @@
 
 #define CONSOLE_BAUD_RATE       (115200U)
 #define WIFI_CONNECT_TIMEOUT_MS (20000U)
+#define NETWORK_TIME_TIMEOUT_MS  (10000U)
 #define HEALTH_API_PORT          (80U)
 #define LED_BLINK_HALF_PERIOD_MS (1000U)
 
@@ -28,6 +31,7 @@ static void delayWithConsolePolling(uint32_t milliseconds)
     while ((Clock_GetTickMs() - start) < milliseconds) {
         Console_Poll();
         HealthApi_Poll();
+        HostCheck_Poll();
     }
 }
 
@@ -37,6 +41,8 @@ int main(void)
     bool wifiConnected;
     bool healthApiStarted = false;
     char localIp[16];
+    uint32_t networkTime;
+    uint32_t timeSyncStart;
 
     Clock_Init();
     Console_Init(CONSOLE_BAUD_RATE);
@@ -57,6 +63,21 @@ int main(void)
         if (WifiModem_GetLocalIp(localIp, sizeof(localIp))) {
             printf("WiFi IP: %s\r\n", localIp);
         }
+        networkTime = 0U;
+        timeSyncStart = Clock_GetTickMs();
+        while (networkTime == 0U &&
+               (Clock_GetTickMs() - timeSyncStart) < NETWORK_TIME_TIMEOUT_MS) {
+            if (!WifiModem_GetNetworkTime(&networkTime)) {
+                Clock_DelayMs(500U);
+            }
+        }
+        if (networkTime != 0U && Rtc_SetEpoch(networkTime)) {
+            printf("RTC synchronized: %lu\r\n", (unsigned long) Rtc_GetEpoch());
+        } else {
+            printf("RTC synchronization failed (network time %lu, stage %u)\r\n",
+                   (unsigned long) networkTime, (unsigned int) Rtc_GetLastError());
+        }
+        HostCheck_Init();
         healthApiStarted = HealthApi_Start(HEALTH_API_PORT);
         printf("Health API %s on port %u\r\n", healthApiStarted ? "ready" : "failed", HEALTH_API_PORT);
     }
@@ -65,6 +86,7 @@ int main(void)
     {
         if (healthApiStarted) {
             HealthApi_Poll();
+            HostCheck_Poll();
         }
         R_PFS->PORT[LED_PORT_NUM].PIN[LED_PIN_NUM].PmnPFS_b.PODR = 1;
         delayWithConsolePolling(LED_BLINK_HALF_PERIOD_MS);
