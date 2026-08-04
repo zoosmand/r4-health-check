@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* AT-style command set implemented by the ESP32-S3 co-processor firmware
@@ -14,7 +15,7 @@
 #define WIFI_MODEM_BAUD_RATE        (115200U)
 #define WIFI_MODEM_RESPONSE_TIMEOUT (2000U)
 #define WIFI_MODEM_RESET_RETRIES    (3U)
-#define WIFI_MODEM_BUFFER_CAP       (96U)
+#define WIFI_MODEM_BUFFER_CAP       (256U)
 #define WIFI_MODEM_STATUS_CONNECTED "3" /* wl_status_t WL_CONNECTED */
 
 static bool wifiModem_EndsWith(const char * buffer, uint32_t length, const char * suffix)
@@ -33,6 +34,39 @@ static void wifiModem_DrainRxBuffer(void)
     uint8_t discard;
 
     while (WifiUart_TryReadByte(&discard)) {}
+}
+
+static bool wifiModem_WaitForStatus(uint32_t timeoutMs)
+{
+    char buffer[8];
+    uint32_t length = 0;
+    uint32_t startTick = Clock_GetTickMs();
+
+    while ((Clock_GetTickMs() - startTick) < timeoutMs) {
+        uint8_t receivedByte;
+
+        if (!WifiUart_TryReadByte(&receivedByte)) {
+            continue;
+        }
+
+        if (length < (sizeof(buffer) - 1U)) {
+            buffer[length++] = (char) receivedByte;
+        } else {
+            memmove(buffer, &buffer[1], sizeof(buffer) - 2U);
+            buffer[sizeof(buffer) - 2U] = (char) receivedByte;
+            length = sizeof(buffer) - 1U;
+        }
+        buffer[length] = '\0';
+
+        if (wifiModem_EndsWith(buffer, length, "OK\r\n")) {
+            return true;
+        }
+        if (wifiModem_EndsWith(buffer, length, "ERROR\r\n")) {
+            return false;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -87,7 +121,21 @@ static bool wifiModem_SendCommand(const char * command, char * payloadOut, size_
         if (colon != NULL) {
             const char * valueStart = colon + 1;
             const char * lineEnd = strchr(valueStart, '\r');
-            size_t valueLength = (lineEnd != NULL) ? (size_t) (lineEnd - valueStart) : strlen(valueStart);
+            size_t valueLength;
+
+            /* Arduino's modem protocol commonly formats replies as
+               "+COMMAND: value". Ignore that presentation whitespace so
+               callers receive the actual payload (for example "3" for
+               WL_CONNECTED rather than " 3"). */
+            while (*valueStart == ' ' || *valueStart == '\t') {
+                valueStart++;
+            }
+
+            valueLength = (lineEnd != NULL) ? (size_t) (lineEnd - valueStart) : strlen(valueStart);
+            while (valueLength > 0U &&
+                   (valueStart[valueLength - 1U] == ' ' || valueStart[valueLength - 1U] == '\t')) {
+                valueLength--;
+            }
 
             if (valueLength >= payloadCap) {
                 valueLength = payloadCap - 1U;
@@ -146,4 +194,111 @@ bool WifiModem_Connect(const char * ssid, const char * passphrase, uint32_t time
     }
 
     return false;
+}
+
+bool WifiModem_GetLocalIp(char * ipOut, size_t ipCap)
+{
+    return wifiModem_SendCommand("AT+IPSTA=0\r\n", ipOut, ipCap, WIFI_MODEM_RESPONSE_TIMEOUT);
+}
+
+static int32_t wifiModem_SendSocketCommand(const char * command)
+{
+    char payload[16];
+
+    if (!wifiModem_SendCommand(command, payload, sizeof(payload), WIFI_MODEM_RESPONSE_TIMEOUT)) {
+        return -1;
+    }
+
+    return (int32_t) strtol(payload, NULL, 10);
+}
+
+int32_t WifiModem_ServerBegin(uint16_t port)
+{
+    char command[32];
+
+    snprintf(command, sizeof(command), "AT+BEGINSERVER=%u\r\n", (unsigned int) port);
+    return wifiModem_SendSocketCommand(command);
+}
+
+int32_t WifiModem_ServerAvailable(int32_t serverSocket)
+{
+    char command[40];
+
+    snprintf(command, sizeof(command), "AT+SERVERAVAILABLE=%ld\r\n", (long) serverSocket);
+    return wifiModem_SendSocketCommand(command);
+}
+
+int32_t WifiModem_ClientAvailable(int32_t clientSocket)
+{
+    char command[32];
+
+    snprintf(command, sizeof(command), "AT+AVAILABLE=%ld\r\n", (long) clientSocket);
+    return wifiModem_SendSocketCommand(command);
+}
+
+int32_t WifiModem_ClientRead(int32_t clientSocket, char * dataOut, size_t dataCap)
+{
+    char command[48];
+    char payload[WIFI_MODEM_BUFFER_CAP];
+    const char * dataStart;
+    size_t dataLength;
+
+    if (dataOut == NULL || dataCap < 2U) {
+        return -1;
+    }
+
+    snprintf(command, sizeof(command), "AT+CLIENTRECEIVE=%ld,%u\r\n",
+             (long) clientSocket, (unsigned int) (dataCap - 1U));
+    if (!wifiModem_SendCommand(command, payload, sizeof(payload), WIFI_MODEM_RESPONSE_TIMEOUT)) {
+        return -1;
+    }
+
+    dataStart = strchr(payload, '|');
+    if (dataStart == NULL) {
+        dataOut[0] = '\0';
+        return 0;
+    }
+    dataStart++;
+    if (*dataStart == ' ') {
+        dataStart++;
+    }
+
+    dataLength = strlen(dataStart);
+    if (dataLength >= dataCap) {
+        dataLength = dataCap - 1U;
+    }
+    memcpy(dataOut, dataStart, dataLength);
+    dataOut[dataLength] = '\0';
+    return (int32_t) dataLength;
+}
+
+bool WifiModem_ClientWrite(int32_t clientSocket, const char * data, size_t dataLength)
+{
+    char command[48];
+
+    if (data == NULL || dataLength == 0U) {
+        return false;
+    }
+
+    wifiModem_DrainRxBuffer();
+    snprintf(command, sizeof(command), "AT+CLIENTSEND=%ld,%u\r\n",
+             (long) clientSocket, (unsigned int) dataLength);
+    WifiUart_WriteString(command);
+    while (dataLength > 0U) {
+        WifiUart_WriteByte((uint8_t) *data);
+        data++;
+        dataLength--;
+    }
+
+    /* The payload operation returns a plain OK/ERROR response. Do not drain
+       RX or send another command while waiting for that acknowledgement. */
+    return wifiModem_WaitForStatus(WIFI_MODEM_RESPONSE_TIMEOUT);
+}
+
+void WifiModem_ClientClose(int32_t clientSocket)
+{
+    char command[36];
+
+    snprintf(command, sizeof(command), "AT+CLIENTCLOSE=%ld\r\n", (long) clientSocket);
+    (void) wifiModem_SendCommand(command, NULL, 0U, WIFI_MODEM_RESPONSE_TIMEOUT);
 }
