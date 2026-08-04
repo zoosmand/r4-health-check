@@ -66,6 +66,9 @@ build*/
 # Locally provisioned TLS server credentials
 TLS/Private/
 
+# Locally provisioned WiFi credentials
+src/Srv/WifiModem/wifi_credentials.h
+
 # Vendir Sources
 Drivers/
 Middlewares/

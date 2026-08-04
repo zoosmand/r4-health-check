@@ -8,21 +8,21 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "D:/dev/R4/health-check/include",
-                "D:/dev/R4/health-check/src",
-                "C:/Users/zoosman/.platformio/packages/framework-cmsis-renesas/CMSIS/Core/Include",
-                "C:/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Include",
-                "C:/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Source",
+                "/Users/zoosman/dev/IoT/r4-health-check/include",
+                "/Users/zoosman/dev/IoT/r4-health-check/src",
+                "/Users/zoosman/.platformio/packages/framework-cmsis-renesas/CMSIS/Core/Include",
+                "/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Include",
+                "/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Source",
                 ""
             ],
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "D:/dev/R4/health-check/include",
-                    "D:/dev/R4/health-check/src",
-                    "C:/Users/zoosman/.platformio/packages/framework-cmsis-renesas/CMSIS/Core/Include",
-                    "C:/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Include",
-                    "C:/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Source",
+                    "/Users/zoosman/dev/IoT/r4-health-check/include",
+                    "/Users/zoosman/dev/IoT/r4-health-check/src",
+                    "/Users/zoosman/.platformio/packages/framework-cmsis-renesas/CMSIS/Core/Include",
+                    "/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Include",
+                    "/Users/zoosman/.platformio/packages/framework-cmsis-renesas/Device/RENESAS/Source",
                     ""
                 ]
             },
@@ -42,7 +42,7 @@
             ],
             "cStandard": "gnu11",
             "cppStandard": "gnu++17",
-            "compilerPath": "C:/Users/zoosman/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-gcc.exe",
+            "compilerPath": "/Users/zoosman/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-gcc",
             "compilerArgs": [
                 "-mthumb",
                 "-mcpu=cortex-m4",
