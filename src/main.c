@@ -2,6 +2,7 @@
 #include <bsp_arm_exceptions.h>
 #include <R7FA4M1AB.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "Core/Clock/clock.h"
 #include "Srv/Console/console.h"
@@ -30,10 +31,11 @@ static void delayWithConsolePolling(uint32_t milliseconds)
 int main(void)
 {
     bool wifiConnected;
+    uint32_t printfTestCount = 0;
 
     Clock_Init();
     Console_Init(CONSOLE_BAUD_RATE);
-    Console_Printf("r4-health-check booting...\r\n");
+    printf("r4-health-check booting...\r\n");
 
     // Unlock the PFS registers: clear BOWI, then set PFSWE.
     R_PMISC->PWPR = 0;
@@ -45,15 +47,17 @@ int main(void)
     // TODO: surface connection status via a health service once one
     // exists, instead of just printing it here.
     wifiConnected = WifiModem_Init() && WifiModem_Connect(WIFI_SSID, WIFI_PASSWORD, WIFI_CONNECT_TIMEOUT_MS);
-    Console_Printf("WiFi %s\r\n", wifiConnected ? "connected" : "not connected");
+    printf("WiFi %s\r\n", wifiConnected ? "connected" : "not connected");
 
     while (1)
     {
         R_PFS->PORT[LED_PORT_NUM].PIN[LED_PIN_NUM].PmnPFS_b.PODR = 1;
         delayWithConsolePolling(LED_BLINK_HALF_PERIOD_MS);
+        printf("printf test %lu\r\n", (unsigned long) ++printfTestCount);
 
         R_PFS->PORT[LED_PORT_NUM].PIN[LED_PIN_NUM].PmnPFS_b.PODR = 0;
         delayWithConsolePolling(LED_BLINK_HALF_PERIOD_MS);
+        printf("printf test %lu\r\n", (unsigned long) ++printfTestCount);
     }
 
     return 0;

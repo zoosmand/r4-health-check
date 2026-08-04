@@ -4,8 +4,10 @@
 #include <bsp_arm_exceptions.h>
 #include <R7FA4M1AB.h>
 
-/* Set by Core/Clock's Clock_Init(): ICLK /1, PCLKB /2 from a 48 MHz HOCO. */
-#define SCI_UART_PCLKB_HZ (24000000U)
+/* The SCI baud-rate generator is clocked at 48 MHz on the UNO R4 WiFi.
+   This was also verified on hardware: calculating BRR from 24 MHz produced
+   exactly twice the requested line rate. */
+#define SCI_UART_CLOCK_HZ (48000000U)
 
 /* PRCR unlock key. PRC1 gates the module-stop registers (MSTPCRB). */
 #define SCI_UART_PRCR_KEY  (0xA500U)
@@ -30,6 +32,7 @@ void SciUart_Init(const SciUart_Instance * instance, uint32_t baudRate)
 {
     R_SCI0_Type * peripheral = instance->peripheral;
     uint32_t brr;
+    volatile uint32_t settlingDelay;
 
     sciUart_ConfigurePins(instance);
 
@@ -40,8 +43,19 @@ void SciUart_Init(const SciUart_Instance * instance, uint32_t baudRate)
 
     peripheral->SCR = 0; /* Stop TX/RX while the mode/baud settings change. */
 
+    /* The resident bootloader jumps to the application without resetting the
+       MCU. Do not rely on SCI reset values: a previous program may have left
+       FIFO mode, inverted data, LSB-first transfer, or a non-8-bit character
+       length selected. */
+    peripheral->FCR = 0;
+    peripheral->SCMR_b.SMIF = 0;
+    peripheral->SCMR_b.SINV = 0;
+    peripheral->SCMR_b.SDIR = 0;
+    peripheral->SCMR_b.CHR1 = 1;
+
     peripheral->SMR_b.CM   = 0; /* Asynchronous mode. */
     peripheral->SMR_b.CHR  = 0; /* 8-bit data. */
+    peripheral->SMR_b.MP   = 0; /* Disable multi-processor mode. */
     peripheral->SMR_b.PE   = 0; /* No parity. */
     peripheral->SMR_b.STOP = 0; /* 1 stop bit. */
     peripheral->SMR_b.CKS  = 0; /* PCLKB / 1 base clock. */
@@ -49,15 +63,24 @@ void SciUart_Init(const SciUart_Instance * instance, uint32_t baudRate)
     peripheral->SEMR_b.BGDM  = 1; /* Baud-rate generator double-speed mode. */
     peripheral->SEMR_b.ABCSE = 0;
     peripheral->SEMR_b.ABCS  = 0;
+    peripheral->SEMR_b.NFEN  = 0;
+    peripheral->SEMR_b.ACS0  = 0;
     peripheral->SEMR_b.BRME  = 0; /* No bit-rate modulation needed: with
-                                     BGDM=1, CKS=0 and a 24 MHz PCLKB,
+                                     BGDM=1 and CKS=0,
                                      115200 baud lands within ~0.2% of
                                      nominal. */
 
-    /* BRR = PCLKB / (16 * baudRate) - 1, valid for BGDM=1, ABCS=0, CKS=0
+    /* BRR = SCI clock / (16 * baudRate) - 1, valid for BGDM=1, ABCS=0, CKS=0
        (RA hardware manual, SCI asynchronous bit rate formula). */
-    brr = (SCI_UART_PCLKB_HZ / (16U * baudRate)) - 1U;
+    brr = (SCI_UART_CLOCK_HZ / (16U * baudRate)) - 1U;
     peripheral->BRR = (uint8_t) brr;
+
+    /* The hardware requires at least one bit interval between changing BRR
+       and enabling transmission/reception. This loop is deliberately longer
+       than that interval at the configured 48 MHz ICLK. */
+    for (settlingDelay = 0; settlingDelay < 512U; settlingDelay++) {
+        __NOP();
+    }
 
     peripheral->SCR_b.TE = 1;
     peripheral->SCR_b.RE = 1;

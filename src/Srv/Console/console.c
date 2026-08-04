@@ -6,11 +6,9 @@
 #include <bsp_arm_exceptions.h>
 #include <R7FA4M1AB.h>
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
-#define CONSOLE_PRINTF_BUFFER_CAP (128U)
 #define CONSOLE_LINE_BUFFER_CAP   (32U)
 
 /* PRCR unlock key. PRC1 gates the VBTBKR backup registers used below. */
@@ -31,23 +29,28 @@ static uint32_t lineLength = 0;
 void Console_Init(uint32_t baudRate)
 {
     ConsoleUart_Init(baudRate);
+    (void) setvbuf(stdout, NULL, _IONBF, 0);
+    (void) setvbuf(stderr, NULL, _IONBF, 0);
 }
 
-void Console_Printf(const char * format, ...)
+/* Newlib calls _write() for stdout/stderr. Sending the supplied byte count,
+   rather than treating the data as a C string, also preserves embedded NULs. */
+int _write(int file, char * data, int length)
 {
-    char buffer[CONSOLE_PRINTF_BUFFER_CAP];
-    va_list args;
+    int index;
 
-    va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
+    (void) file;
 
-    ConsoleUart_WriteString(buffer);
+    for (index = 0; index < length; index++) {
+        ConsoleUart_WriteByte((uint8_t) data[index]);
+    }
+
+    return length;
 }
 
 static void console_EnterBootloader(void)
 {
-    Console_Printf("Entering bootloader...\r\n");
+    printf("Entering bootloader...\r\n");
 
     R_SYSTEM->PRCR = (uint16_t) (CONSOLE_PRCR_KEY | CONSOLE_PRCR_PRC1);
     CONSOLE_BOOT_MAGIC_REGISTER = CONSOLE_BOOT_MAGIC_VALUE;
@@ -62,7 +65,7 @@ static void console_DispatchLine(const char * line)
     if (strcmp(line, "boot") == 0) {
         console_EnterBootloader();
     } else if (line[0] != '\0') {
-        Console_Printf("ERR unknown command: %s\r\n", line);
+        printf("ERR unknown command: %s\r\n", line);
     }
 }
 

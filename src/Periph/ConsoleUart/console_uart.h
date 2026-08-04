@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 /**
-  * @brief Configure SCI9 (TXD9 on D22, RXD9 on D23) as an asynchronous 8N1
+  * @brief Configure SCI2 (TXD2 on D1, RXD2 on D0) as an asynchronous 8N1
   *        UART, intended for a USB-serial adapter or a debug probe's UART
   *        passthrough.
   * @param baudRate (uint32_t) Requested bit rate, for example 115200.

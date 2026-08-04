@@ -10,14 +10,6 @@
 void Console_Init(uint32_t baudRate);
 
 /**
-  * @brief printf()-style formatted output to the debug console. Blocks
-  *        until all bytes are transmitted; output longer than the internal
-  *        128-byte buffer is truncated.
-  * @param format (const char*) Non-null printf-style format string.
-  */
-void Console_Printf(const char * format, ...);
-
-/**
   * @brief Poll for and process console input. Never blocks; call this
   *        regularly (for example every main-loop iteration) so typed
   *        commands are handled promptly.
