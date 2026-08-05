@@ -46,6 +46,7 @@ private:
   AlarmController &_alarmController;
 
   size_t _roundRobinCursor;
+  unsigned long _nextCheckAllowedAtMs;
 };
 
 #endif

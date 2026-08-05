@@ -18,6 +18,8 @@ constexpr unsigned long SERIAL_WAIT_TIMEOUT_MS = 3000UL;
 constexpr uint16_t API_PORT = 80;
 constexpr unsigned long API_CLIENT_TIMEOUT_MS = 1500UL;
 
+// Allow the WiFi coprocessor time to release the previous TLS connection.
+constexpr unsigned long MINIMUM_GAP_BETWEEN_CHECKS_MS = 2000UL;
 // -----------------------------------------------------------------------------
 // Wi-Fi
 // -----------------------------------------------------------------------------
@@ -68,30 +70,30 @@ const ServiceConfig SERVICE_CONFIGS[] = {
     DEFAULT_HTTP_TIMEOUT_MS,
     true
   },
-  // {
-  //   "pgw-ic",
-  //   "Intraclear New Acquring",
-  //   "pgw.intraclear.com",
-  //   "/",
-  //   443,
-  //   DEFAULT_CHECK_INTERVAL_MS,
-  //   DEFAULT_HTTP_TIMEOUT_MS,
-  //   true
-  // },
-  // {
-  //   "pgw-ac",
-  //   "Whitelebled Acquring",
-  //   "pgw.anycrypto.io",
-  //   "/",
-  //   443,
-  //   DEFAULT_CHECK_INTERVAL_MS,
-  //   DEFAULT_HTTP_TIMEOUT_MS,
-  //   true
-  // },
   {
     "public-site",
     "Public Website",
     "www.neuro-ural.ru",
+    "/",
+    443,
+    DEFAULT_CHECK_INTERVAL_MS,
+    DEFAULT_HTTP_TIMEOUT_MS,
+    true
+  },
+  {
+    "pgw-ic",
+    "Intraclear New Acquring",
+    "pgw.intraclear.com",
+    "/",
+    443,
+    DEFAULT_CHECK_INTERVAL_MS,
+    DEFAULT_HTTP_TIMEOUT_MS,
+    true
+  },
+  {
+    "pgw-ac",
+    "Whitelebled Acquring",
+    "pgw.anycrypto.io",
     "/",
     443,
     DEFAULT_CHECK_INTERVAL_MS,

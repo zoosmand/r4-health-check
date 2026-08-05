@@ -1,4 +1,5 @@
 #include "HealthChecker.h"
+#include "AppConfig.h"
 #include "WiFiS3.h"
 
 HealthChecker::HealthChecker(
@@ -53,10 +54,21 @@ void HealthChecker::update()
 
   const unsigned long now = millis();
 
+  /*
+    Do not start another TLS connection immediately after the previous one.
+
+    The signed subtraction keeps the millis() rollover comparison safe.
+  */
+  if (static_cast<long>(now - _nextCheckAllowedAtMs) < 0)
+  {
+    return;
+  }
+
   // Perform no more than one check during one loop iteration.
   for (size_t offset = 0; offset < _serviceCount; offset++)
   {
-    const size_t index = (_roundRobinCursor + offset) % _serviceCount;
+    const size_t index =
+      (_roundRobinCursor + offset) % _serviceCount;
 
     if (!_configs[index].enabled)
     {
@@ -76,9 +88,19 @@ void HealthChecker::update()
     }
 
     state.checkQueued = false;
-    _roundRobinCursor = (index + 1) % _serviceCount;
+
+    _roundRobinCursor =
+      (index + 1) % _serviceCount;
 
     performCheck(index);
+
+    /*
+      Give the ESP32-S3 networking module time to close and release the
+      previous TLS socket before opening another connection.
+    */
+    _nextCheckAllowedAtMs =
+      millis() + MINIMUM_GAP_BETWEEN_CHECKS_MS;
+
     return;
   }
 }
@@ -224,63 +246,131 @@ void HealthChecker::performCheck(size_t index)
 
   client.setTimeout(config.timeoutMs);
 
-  if (!client.connect(config.host, config.port))
+
+  IPAddress resolvedIp;
+
+  Serial.print(F("Resolving host: "));
+  Serial.println(config.host);
+
+  if (WiFi.hostByName(config.host, resolvedIp) != 1)
   {
-    state.lastError = "HTTPS connection failed";
+    state.lastError = "DNS resolution failed";
+
+    Serial.print(F("DNS resolution failed for: "));
+    Serial.println(config.host);
   }
   else
   {
-    client.print(F("HEAD "));
-    client.print(config.path);
-    client.println(F(" HTTP/1.1"));
+    Serial.print(F("Resolved IP: "));
+    Serial.println(resolvedIp);
 
-    client.print(F("Host: "));
-    client.println(config.host);
+    Serial.print(F("Opening TLS connection to: "));
+    Serial.print(config.host);
+    Serial.print(':');
+    Serial.println(config.port);
 
-    client.println(F("User-Agent: UNO-R4-Health-Checker/2.0"));
-    client.println(F("Accept: */*"));
-    client.println(F("Connection: close"));
-    client.println();
-
-    const unsigned long waitStartedAt = millis();
-
-    while (!client.available() &&
-           client.connected() &&
-           millis() - waitStartedAt < config.timeoutMs)
+    if (!client.connect(config.host, config.port))
     {
-      _alarmController.update();
-      delay(1);
-    }
+      state.lastError = "HTTPS connection failed";
 
-    if (!client.available())
-    {
-      state.lastError = "HTTP response timeout";
+      Serial.print(F("TLS connection failed for host: "));
+      Serial.print(config.host);
+      Serial.print(F(", port: "));
+      Serial.println(config.port);
     }
     else
     {
-      String statusLine = client.readStringUntil('\n');
-      statusLine.trim();
+      client.print(F("HEAD "));
+      client.print(config.path);
+      client.println(F(" HTTP/1.1"));
 
-      Serial.print(F("Response: "));
-      Serial.println(statusLine);
+      client.print(F("Host: "));
+      client.println(config.host);
 
-      state.httpStatus = parseStatusCode(statusLine);
+      client.println(F("User-Agent: UNO-R4-Health-Checker/2.0"));
+      client.println(F("Accept: */*"));
+      client.println(F("Connection: close"));
+      client.println();
 
-      if (state.httpStatus <= 0)
+      const unsigned long waitStartedAt = millis();
+
+      while (!client.available() &&
+            client.connected() &&
+            millis() - waitStartedAt < config.timeoutMs)
       {
-        state.lastError = "Invalid HTTP status line";
+        _alarmController.update();
+        delay(1);
       }
-      else if (state.httpStatus == 200)
+
+      if (!client.available())
       {
-        healthy = true;
+        state.lastError = "HTTP response timeout";
       }
       else
       {
-        state.lastError = "Unexpected HTTP status";
-      }
-    }
+        String statusLine = client.readStringUntil('\n');
+        statusLine.trim();
 
-    client.stop();
+        Serial.print(F("Response: "));
+        Serial.println(statusLine);
+
+        state.httpStatus = parseStatusCode(statusLine);
+
+        if (state.httpStatus <= 0)
+        {
+          state.lastError = "Invalid HTTP status line";
+        }
+        else if (state.httpStatus == 200)
+        {
+          healthy = true;
+        }
+        else
+        {
+          state.lastError = "Unexpected HTTP status";
+        }
+
+        /*
+          Consume the remaining HTTP response headers.
+
+          Even though HEAD responses have no body, leaving unread headers in the
+          socket can interfere with closing and recycling the connection.
+        */
+        const unsigned long headersStartedAt = millis();
+
+        while (millis() - headersStartedAt < config.timeoutMs)
+        {
+          if (client.available())
+          {
+            String headerLine = client.readStringUntil('\n');
+
+            if (headerLine == "\r" || headerLine.length() == 0)
+            {
+              break;
+            }
+          }
+          else if (!client.connected())
+          {
+            break;
+          }
+          else
+          {
+            _alarmController.update();
+            delay(1);
+          }
+        }
+      }
+
+      /*
+        Ask the WiFi coprocessor to close the TLS connection.
+      */
+      client.stop();
+
+      /*
+        Let commands and socket state propagate to the connectivity module.
+        The longer inter-service gap is still enforced by update().
+      */
+      delay(50);
+    }
   }
 
   state.lastCheckDurationMs = millis() - state.lastCheckStartedAtMs;
