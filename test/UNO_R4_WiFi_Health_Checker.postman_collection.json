@@ -1,0 +1,209 @@
+{
+  "info": {
+    "_postman_id": "3d6e5f36-6bdb-4a52-a6c2-31e3d1b8e5c1",
+    "name": "UNO R4 WiFi Health Checker API",
+    "description": "Postman collection for the Arduino UNO R4 WiFi Health Checker.\n\nSet the collection variable `baseUrl` to the board's IP address, for example: `http://192.168.1.50`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://192.168.1.50",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "status"
+          ]
+        },
+        "description": "Returns the current Wi-Fi, health-check, HTTP, alarm, and uptime status."
+      },
+      "response": []
+    },
+    {
+      "name": "Run Health Check",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Length",
+            "value": "0",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/check",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "check"
+          ]
+        },
+        "description": "Runs an HTTPS HEAD health check immediately and returns the updated status."
+      },
+      "response": []
+    },
+    {
+      "name": "Test Buzzer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Length",
+            "value": "0",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/buzzer/test",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "buzzer",
+            "test"
+          ]
+        },
+        "description": "Starts the manual buzzer test for the configured test duration."
+      },
+      "response": []
+    },
+    {
+      "name": "Silence Buzzer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Length",
+            "value": "0",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/buzzer/silence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "buzzer",
+            "silence"
+          ]
+        },
+        "description": "Silences the current health-check alarm."
+      },
+      "response": []
+    },
+    {
+      "name": "Unsilence Buzzer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Content-Length",
+            "value": "0",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/buzzer/unsilence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "buzzer",
+            "unsilence"
+          ]
+        },
+        "description": "Re-enables buzzer output for an active alarm."
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('baseUrl')) {",
+          "    throw new Error('Set the collection variable baseUrl to the Arduino URL, for example http://192.168.1.50');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('HTTP status is successful', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+          "});",
+          "",
+          "pm.test('Response is JSON', function () {",
+          "    pm.response.to.be.json;",
+          "});"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "info": {
+    "_postman_id": "37e2ec77-7303-4558-bd9e-19f3d3aaac31",
+    "name": "UNO R4 Multi-Service Health Checker API",
+    "description": "API collection for the structured multi-service UNO R4 WiFi health checker.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://192.168.1.50",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "primary-api",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Status",
+      "item": [
+        {
+          "name": "Get Device Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Services",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services"
+          },
+          "response": []
+        },
+        {
+          "name": "Get One Service",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/{{serviceId}}"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Checks",
+      "item": [
+        {
+          "name": "Queue All Checks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/check"
+          },
+          "response": []
+        },
+        {
+          "name": "Queue One Service Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/{{serviceId}}/check"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Buzzer",
+      "item": [
+        {
+          "name": "Test Buzzer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/buzzer/test"
+          },
+          "response": []
+        },
+        {
+          "name": "Silence Buzzer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/buzzer/silence"
+          },
+          "response": []
+        },
+        {
+          "name": "Unsilence Buzzer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/buzzer/unsilence"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Successful API response', function () {",
+          "  pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+          "});",
+          "pm.test('Response is JSON', function () {",
+          "  pm.response.to.be.json;",
+          "});"
+        ]
+      }
+    }
+  ]
+}
