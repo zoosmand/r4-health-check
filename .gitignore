@@ -68,6 +68,8 @@ TLS/Private/
 
 # Locally provisioned WiFi credentials
 src/Srv/WifiModem/wifi_credentials.h
+Arduino/UNO_R4_Health_Checker/arduino_secrets.h
+Arduino/Health-Check-WebServer/arduino_secrets.h
 
 # Vendir Sources
 Drivers/

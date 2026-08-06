@@ -32,8 +32,14 @@ curl -i http://<board-ip>/health
 The successful JSON response is:
 
 ```json
-{"status":"ok"}
+{"status":"ok","check":{"host":"secure.intraclear.com","completed":true,"success":true,"http_status":200,"checked_at":1770000000}}
 ```
+
+The board synchronizes its hardware RTC from network time after WiFi connects.
+It then checks `https://secure.intraclear.com` every 60 seconds with an HTTPS
+`HEAD /` request. TLS certificate verification uses the ESP32-S3 firmware's
+built-in CA bundle. The latest result and Unix completion timestamp are exposed
+in the `/health` response; failed checks set the top-level status to `degraded`.
 
 All other paths return `404 Not Found` with a JSON error response.
 

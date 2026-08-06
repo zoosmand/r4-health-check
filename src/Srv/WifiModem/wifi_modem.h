@@ -28,6 +28,9 @@ bool WifiModem_Connect(const char * ssid, const char * passphrase, uint32_t time
 /** Query the station IPv4 address after a successful connection. */
 bool WifiModem_GetLocalIp(char * ipOut, size_t ipCap);
 
+/** Obtain current Unix time from the network-connected modem. */
+bool WifiModem_GetNetworkTime(uint32_t * epochOut);
+
 /** Open a TCP listening socket. The returned socket is negative on failure. */
 int32_t WifiModem_ServerBegin(uint16_t port);
 
@@ -45,5 +48,27 @@ bool WifiModem_ClientWrite(int32_t clientSocket, const char * data, size_t dataL
 
 /** Close a client socket. */
 void WifiModem_ClientClose(int32_t clientSocket);
+
+/** Allocate a TLS client socket. */
+int32_t WifiModem_SslClientBegin(void);
+
+/** Select the bridge firmware's built-in CA bundle for a TLS socket. */
+bool WifiModem_SslClientUseCaBundle(int32_t clientSocket);
+
+/** Connect a TLS socket to a host name and port. */
+bool WifiModem_SslClientConnect(int32_t clientSocket, const char * host, uint16_t port,
+                                uint32_t timeoutMs);
+
+/** Return the number of encrypted-response bytes waiting for a TLS client. */
+int32_t WifiModem_SslClientAvailable(int32_t clientSocket);
+
+/** Read response bytes from a TLS client. */
+int32_t WifiModem_SslClientRead(int32_t clientSocket, char * dataOut, size_t dataCap);
+
+/** Send an exact byte sequence through a TLS client. */
+bool WifiModem_SslClientWrite(int32_t clientSocket, const char * data, size_t dataLength);
+
+/** Close a TLS client socket. */
+void WifiModem_SslClientClose(int32_t clientSocket);
 
 #endif /* SRV_WIFIMODEM_WIFI_MODEM_H */
