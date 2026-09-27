@@ -54,7 +54,10 @@ constexpr unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000UL;
 // the next update() sees the connection.
 constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 5000UL;
 
-// Raise the network alarm after Wi-Fi has been down this long.
+// After association, wait this long for a DHCP address before reconnecting.
+constexpr unsigned long WIFI_ADDRESS_TIMEOUT_MS = 20000UL;
+
+// Raise the network alarm after the network has not been ready this long.
 constexpr unsigned long WIFI_OUTAGE_ALARM_MS = 60UL * 1000UL;
 
 // -----------------------------------------------------------------------------

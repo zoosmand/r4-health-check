@@ -43,6 +43,12 @@ public:
     */
   void update();
 
+  /**
+    * @brief Make sure the listener is open and print the endpoints with the
+    *        current IP address. Call each time the network becomes ready.
+    */
+  void onNetworkReady();
+
   void printEndpoints() const;
 
 private:

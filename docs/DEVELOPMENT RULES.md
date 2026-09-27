@@ -41,7 +41,7 @@ before continuing.
 ## Code and documentation
 
 - Follow [the project naming conventions](NAMING_CONVENTIONS.md).
-- Keep project-owned sources in `src/`, host tests in `test/`, and helper
+- Keep project-owned sources in `src/UNO_R4_Health_Checker/`, host tests in `test/`, and helper
   scripts in `tools/`.
 - Do not modify the Arduino core or its bundled libraries (`WiFiS3`, `WDT`,
   `FspTimer`). Wrap them instead. See
@@ -69,7 +69,7 @@ Do not commit:
 - build products or logs;
 - editor, assistant, or machine-specific configuration;
 - plaintext passwords, bearer tokens, private keys, or certificates containing
-  private keys, including `src/arduino_secrets.h`;
+  private keys, including `arduino_secrets.h`;
 - generated files that embed secrets;
 - unrelated local changes.
 

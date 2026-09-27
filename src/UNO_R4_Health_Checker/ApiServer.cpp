@@ -60,6 +60,13 @@ void ApiServer::update()
   client.stop();
 }
 
+void ApiServer::onNetworkReady()
+{
+  // No-op when the listener is already open; retries if it failed earlier.
+  _server.begin();
+  printEndpoints();
+}
+
 void ApiServer::printEndpoints() const
 {
   static const char *const ENDPOINTS[] = {

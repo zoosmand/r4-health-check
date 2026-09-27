@@ -2,9 +2,7 @@
 #
 # Compile the firmware with arduino-cli.
 #
-# Arduino tools require the sketch folder to have the same name as the .ino
-# file, while this repository keeps the sources in src/. The script copies
-# src/ into build/UNO_R4_Health_Checker/ and compiles that copy.
+# The sketch lives in src/UNO_R4_Health_Checker/ and is compiled in place.
 #
 # Usage:
 #   tools/build.sh                     compile only
@@ -17,14 +15,15 @@
 #   ARDUINO_CLI   arduino-cli executable (default: arduino-cli from PATH)
 #   FQBN          board (default: arduino:renesas_uno:unor4wifi)
 #
-# When src/arduino_secrets.h is missing (for example in CI), the example
-# file is used for the build copy only.
+# When src/UNO_R4_Health_Checker/arduino_secrets.h is missing (for example
+# in CI), the sketch is copied to build/ and compiled with the example
+# credentials; the source tree is not modified.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKETCH_NAME="UNO_R4_Health_Checker"
-STAGE="$ROOT/build/$SKETCH_NAME"
+SKETCH="$ROOT/src/$SKETCH_NAME"
 OUTPUT="$ROOT/build/output"
 ARDUINO_CLI="${ARDUINO_CLI:-arduino-cli}"
 FQBN="${FQBN:-arduino:renesas_uno:unor4wifi}"
@@ -38,13 +37,16 @@ while getopts "p:" option; do
 done
 shift $((OPTIND - 1))
 
-rm -rf "$STAGE"
-mkdir -p "$STAGE" "$OUTPUT"
-cp "$ROOT"/src/*.ino "$ROOT"/src/*.h "$ROOT"/src/*.cpp "$STAGE"/
+mkdir -p "$OUTPUT"
 
-if [[ ! -f "$STAGE/arduino_secrets.h" ]]; then
-  echo "warning: src/arduino_secrets.h not found; building with the example credentials" >&2
-  cp "$ROOT/src/arduino_secrets.h.example" "$STAGE/arduino_secrets.h"
+if [[ ! -f "$SKETCH/arduino_secrets.h" ]]; then
+  echo "warning: $SKETCH_NAME/arduino_secrets.h not found; building a copy with the example credentials" >&2
+  STAGE="$ROOT/build/$SKETCH_NAME"
+  rm -rf "$STAGE"
+  mkdir -p "$STAGE"
+  cp "$SKETCH"/*.ino "$SKETCH"/*.h "$SKETCH"/*.cpp "$STAGE"/
+  cp "$SKETCH/arduino_secrets.h.example" "$STAGE/arduino_secrets.h"
+  SKETCH="$STAGE"
 fi
 
 "$ARDUINO_CLI" compile \
@@ -52,8 +54,8 @@ fi
   --warnings all \
   --output-dir "$OUTPUT" \
   "$@" \
-  "$STAGE"
+  "$SKETCH"
 
 if [[ -n "$PORT" ]]; then
-  "$ARDUINO_CLI" upload --fqbn "$FQBN" --port "$PORT" --input-dir "$OUTPUT" "$STAGE"
+  "$ARDUINO_CLI" upload --fqbn "$FQBN" --port "$PORT" --input-dir "$OUTPUT" "$SKETCH"
 fi

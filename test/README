@@ -3,7 +3,7 @@
 ## Host-side unit tests
 
 `test/host/` contains unit tests for the Arduino-independent helpers in
-`src/TextParsing.cpp`: HTTP status and request-line parsing, header matching,
+`src/UNO_R4_Health_Checker/TextParsing.cpp`: HTTP status and request-line parsing, header matching,
 token comparison, version comparison, and JSON escaping.
 
     test/host/run.sh

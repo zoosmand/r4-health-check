@@ -18,8 +18,8 @@ either changes.
 
 These files are ignored by git and must be created on each machine:
 
-- `src/arduino_secrets.h`: Wi-Fi credentials and the optional API token.
-  Create it from `src/arduino_secrets.h.example`.
+- `src/UNO_R4_Health_Checker/arduino_secrets.h`: Wi-Fi credentials and the optional
+  API token. Create it from `arduino_secrets.h.example` in the same folder.
 
 ## Generated files
 

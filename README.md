@@ -33,6 +33,17 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   another service starts failing, or the Wi-Fi outage alarm starts. It is also
   cleared when all faults disappear.
 
+### Wi-Fi
+
+- The network counts as connected only when the board has joined the access
+  point **and** DHCP has assigned an IP address. The WiFiS3 library reports
+  "connected" before the address is known.
+- When the address arrives, the serial log prints the SSID, IP address,
+  signal strength, and the API endpoints with that address. This repeats
+  after every reconnection. `GET /api/status` reports it as `ip_address`.
+- If no address arrives within `WIFI_ADDRESS_TIMEOUT_MS` (20 s) after
+  joining, the board reconnects.
+
 ### Watchdog
 
 - The RA4M1 hardware watchdog is started in `setup()` with a ~5.6 s period,
@@ -53,7 +64,7 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
 
 ## Project files
 
-All sources are in `src/`:
+All sources are in `src/UNO_R4_Health_Checker/`:
 
 - `UNO_R4_Health_Checker.ino`: application entry point.
 - `AppConfig.h`: monitored services, timeouts, and hardware constants.
@@ -71,11 +82,11 @@ All sources are in `src/`:
 
 ## Setup
 
-1. Copy `src/arduino_secrets.h.example` to `src/arduino_secrets.h`. The copy
-   is ignored by git; never commit it.
+1. Copy `arduino_secrets.h.example` to `arduino_secrets.h` in the sketch
+   folder. The copy is ignored by git; never commit it.
 2. Enter the Wi-Fi SSID and password. Optionally set `SECRET_API_TOKEN` (see
    [Authentication](#authentication)).
-3. Edit `SERVICE_CONFIGS` in `src/AppConfig.h`.
+3. Edit `SERVICE_CONFIGS` in `AppConfig.h`.
 4. Make sure the Wi-Fi module firmware is up to date (Arduino IDE:
    *Tools → Firmware Updater*). The serial log warns when it is older than
    the version the WiFiS3 library expects.
@@ -83,10 +94,6 @@ All sources are in `src/`:
    not already in the module's bundle.
 
 ### Build with arduino-cli
-
-Arduino tools require the sketch folder to have the same name as the `.ino`
-file. `tools/build.sh` copies `src/` into `build/UNO_R4_Health_Checker/` and
-compiles that copy:
 
 ```sh
 arduino-cli core install arduino:renesas_uno
@@ -96,15 +103,11 @@ tools/build.sh -p /dev/cu.usbmodemXXXX         # compile and upload
 
 ### Build with Arduino IDE
 
-Open `src/UNO_R4_Health_Checker.ino`. The IDE offers to move it into a folder
-named `UNO_R4_Health_Checker`. Instead, open
-`build/UNO_R4_Health_Checker/UNO_R4_Health_Checker.ino` after running
-`tools/build.sh` once, or copy `src/` to a folder with that name. Edit the
-files in `src/`, not the copy.
+Open `src/UNO_R4_Health_Checker/UNO_R4_Health_Checker.ino`.
 
 ## Adding services
 
-Edit `SERVICE_CONFIGS` in `src/AppConfig.h`:
+Edit `SERVICE_CONFIGS` in `AppConfig.h`:
 
 ```cpp
 const ServiceConfig SERVICE_CONFIGS[] = {

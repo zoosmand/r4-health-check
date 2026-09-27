@@ -1,6 +1,6 @@
-// Host-side unit tests for src/TextParsing.cpp. Run with test/host/run.sh.
+// Host-side unit tests for src/UNO_R4_Health_Checker/TextParsing.cpp. Run with test/host/run.sh.
 
-#include "../../src/TextParsing.h"
+#include "../../src/UNO_R4_Health_Checker/TextParsing.h"
 
 #include <cstdio>
 #include <cstring>

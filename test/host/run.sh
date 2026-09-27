@@ -13,7 +13,7 @@ mkdir -p "$OUT"
 "$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
   -fsanitize=address,undefined \
   "$ROOT/test/host/text_parsing_test.cpp" \
-  "$ROOT/src/TextParsing.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/TextParsing.cpp" \
   -o "$OUT/text_parsing_test"
 
 "$OUT/text_parsing_test"

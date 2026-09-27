@@ -21,6 +21,7 @@ NetworkManager networkManager(
   SECRET_PASS,
   WIFI_RECONNECT_INTERVAL_MS,
   WIFI_CONNECT_TIMEOUT_MS,
+  WIFI_ADDRESS_TIMEOUT_MS,
   WIFI_OUTAGE_ALARM_MS
 );
 
@@ -122,8 +123,8 @@ void setup()
 
   apiServer.begin(watchdogReset);
 
-  networkManager.printStatus();
-  apiServer.printEndpoints();
+  // The IP address and endpoints are printed by loop() once DHCP has
+  // assigned an address, which may happen after setup() returns.
 }
 
 void loop()
@@ -132,6 +133,11 @@ void loop()
 
   networkManager.update();
   alarmController.setNetworkAlarm(networkManager.isOutageAlarmDue());
+
+  if (networkManager.consumeNetworkReady())
+  {
+    apiServer.onNetworkReady();
+  }
   alarmController.update();
 
   watchdog.refresh();

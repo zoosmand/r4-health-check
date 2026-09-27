@@ -1,7 +1,7 @@
 # Naming conventions
 
 This document defines the naming and documentation style for the project-owned
-Arduino C++ sources in `src/` and the host tests in `test/`.
+Arduino C++ sources in `src/UNO_R4_Health_Checker/` and the host tests in `test/`.
 
 Existing names are changed only in dedicated refactoring work, because
 renaming an API can affect several modules.
