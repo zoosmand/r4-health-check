@@ -53,9 +53,6 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# MacOS specialties
-.DS_Store
-
 # Vendor documentation
 doc
 
@@ -63,21 +60,10 @@ doc
 build/
 build*/
 
-# Locally provisioned TLS server credentials
-TLS/Private/
+# Locally provisioned Wi-Fi credentials and API token
+arduino_secrets.h
 
-# Locally provisioned WiFi credentials
-src/Srv/WifiModem/wifi_credentials.h
-Arduino/UNO_R4_Health_Checker/arduino_secrets.h
-Arduino/Health-Check-WebServer/arduino_secrets.h
-
-# Vendir Sources
-Drivers/
-Middlewares/
-FreeRTOS-Kernel/
-
-# macOS trash
-Core/.DS_Store
+# macOS
 .DS_Store
 
 # Certificates
@@ -93,6 +79,5 @@ Core/.DS_Store
 *.keystore
 *.p7b
 *.srl
-*.jks
 *.csr
 *.ssh/

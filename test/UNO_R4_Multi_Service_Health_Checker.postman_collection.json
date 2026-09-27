@@ -13,7 +13,12 @@
     },
     {
       "key": "serviceId",
-      "value": "primary-api",
+      "value": "secure",
+      "type": "string"
+    },
+    {
+      "key": "apiToken",
+      "value": "",
       "type": "string"
     }
   ],
@@ -161,5 +166,15 @@
         ]
       }
     }
-  ]
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiToken}}",
+        "type": "string"
+      }
+    ]
+  }
 }

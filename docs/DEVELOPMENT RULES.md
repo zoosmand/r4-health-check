@@ -41,20 +41,22 @@ before continuing.
 ## Code and documentation
 
 - Follow [the project naming conventions](NAMING_CONVENTIONS.md).
-- Keep imported vendor and middleware code in its upstream style.
-- Preserve the established ownership of `Core`, `Periph`, `Srv`, `lwip`, and
-  the future `TLS` tree.
+- Keep project-owned sources in `src/UNO_R4_Health_Checker/`, host tests in `test/`, and helper
+  scripts in `tools/`.
+- Do not modify the Arduino core or its bundled libraries (`WiFiS3`, `WDT`,
+  `Arduino_LED_Matrix`, `FspTimer`). Wrap them instead. See
+  [the third-party source notes](IGNORED_SOURCES.md).
+- Keep Arduino-independent logic (parsing, formatting) in modules that do not
+  include Arduino headers, and cover it with host tests.
 - Document public interfaces, structures, units, blocking behavior, ownership,
-  and task or interrupt restrictions where relevant.
+  and interrupt restrictions where relevant.
+- Keep every blocking step below `LOOP_WATCHDOG_TIMEOUT_MS`, and call
+  `Watchdog::refresh()` between steps and inside wait loops. State the
+  worst-case blocking time of new calls.
 - Keep comments focused on design intent, hardware constraints, and non-obvious
   behavior.
 - Update the README or focused documentation whenever externally visible
   behavior, setup, commands, diagnostics, or dependencies change.
-- Do not delete unused vendor source trees merely to reduce the build. Control
-  compiled sources through the Makefile.
-
-Third-party source trees excluded by `.gitignore` must be installed according
-to [the ignored-source instructions](IGNORED_SOURCES.md).
 
 ## Local and generated files
 
@@ -67,7 +69,7 @@ Do not commit:
 - build products or logs;
 - editor, assistant, or machine-specific configuration;
 - plaintext passwords, bearer tokens, private keys, or certificates containing
-  private keys;
+  private keys, including `arduino_secrets.h`;
 - generated files that embed secrets;
 - unrelated local changes.
 
@@ -82,17 +84,18 @@ Before requesting review:
 1. Inspect the complete diff and confirm that it contains only issue-related
    changes.
 2. Run `git diff --check`.
-3. Perform a clean firmware build using the repository Makefile.
+3. Perform a clean firmware build with `tools/build.sh`.
 4. Review compiler and linker warnings rather than dismissing them
    automatically.
-5. Record Flash, DTCM, SRAM, and dedicated DMA-memory changes when material.
-6. Run available host-side tests and static checks.
+5. Record flash and SRAM usage changes when material. `tools/build.sh`
+   prints both.
+6. Run the host-side tests with `test/host/run.sh`.
 7. Test on the target device when hardware behavior is affected.
 
 The maintainer performs final target-device checks unless they explicitly
 delegate them. Do not report hardware verification unless it actually ran.
-Non-critical vendor-library warnings may be accepted only after their impact
-has been reviewed and documented.
+Warnings from the Arduino core or its libraries may be accepted only after
+their impact has been reviewed and documented.
 
 ## Commits and publication
 
