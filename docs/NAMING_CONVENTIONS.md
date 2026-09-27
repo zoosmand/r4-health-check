@@ -1,121 +1,112 @@
 # Naming conventions
 
-This document defines the preferred naming style for project-owned R4
-health-check firmware in `Core`, `Periph`, `Srv`.
+This document defines the naming and documentation style for the project-owned
+Arduino C++ sources in `src/` and the host tests in `test/`.
 
-The conventions describe the target style. Existing names are changed only in
-dedicated refactoring work, because renaming an API can affect several modules.
+Existing names are changed only in dedicated refactoring work, because
+renaming an API can affect several modules.
 
 ## General rules
 
 - Use English names that describe purpose rather than implementation detail.
 - Spell out words unless an abbreviation is established in the hardware or
   protocol documentation.
-- Keep hardware and protocol names in their canonical form: `DS18B20`,
-  `Ethernet`, `HTTPS`, `IWDG`, `LAN8742`, `lwIP`, `Mbed TLS`, `NTP`, `RMII`,
-  `RTC`, `SPI`, `TLS`, and `W25Q64`.
+- Keep hardware and protocol names in their canonical form: `DNS`, `HTTP`,
+  `HTTPS`, `JSON`, `RA4M1`, `RTC`, `SNI`, `TLS`, `UNO R4`, `WDT`, `Wi-Fi`.
+  Inside identifiers, treat them as words: `HttpLineReader`, `parseHttpStatusCode`.
 - Include units in names when the type alone does not make them clear, for
-  example `periodMs`, `temperatureCentiDegrees`, or `humidityMilliPercent`.
-- Avoid new identifiers beginning with an underscore. C reserves several such
-  forms for the implementation.
-- Use one term consistently for one concept. Prefer `Init`, `Read`, `Write`,
-  `Measure`, `Get`, `Set`, `Lock`, `Unlock`, `Register`, and `Report`.
+  example `intervalMs`, `timeoutMs`, or `rssiDbm`.
+- Use one term consistently for one concept. Prefer `begin`, `update`, `read`,
+  `write`, `get`, `set`, `is`, `has`, `queue`, `save`, and `restore`.
 
 ## Files and modules
 
-- Use lowercase `snake_case` file names: `health_service.c`.
-- Give a public header the same base name as its implementation file.
-- STM32 initialization and board-level facilities belong in `Core`;
-  FreeRTOS-based application services belong in `Srv`; project-owned lwIP
-  integration belongs under `lwip/system`; TLS configuration, trust data, and
-  transport code belong in `TLS`.
-- Keep imported source files in their upstream directory structure. Do not
-  rename vendor files merely to satisfy this document.
+- One module is one class or one group of free functions.
+- Name the files after the module in `PascalCase`, with a header and an
+  implementation of the same base name: `HealthChecker.h`,
+  `HealthChecker.cpp`. This matches Arduino library and sketch conventions.
+- The sketch entry point is `UNO_R4_Health_Checker.ino`. Keep it limited to
+  object construction, `setup()`, and `loop()`.
+- Keep modules that do not need Arduino headers free of them (for example
+  `TextParsing`), so they can be tested on the host.
+- Header guards use the upper-case file name: `HEALTH_CHECKER_H`.
 
-## Functions
+## Classes and functions
 
-- Public functions use `PascalCase` with a module prefix:
-  `HealthService_Init`, `Rtc_GetUnixTime`, `TlsTransport_Head`.
-- Private functions use `camelCase` with a module prefix:
-  `healthService_WatchdogReload`.
-- Use an underscore between the module name and the operation for new public
-APIs.
-- Use verbs for operations and nouns only for accessors that return an object.
-- An `Init` function initializes hardware or creates a service and does not
-  perform periodic work.
-- A `Get` function does not transfer ownership of returned storage unless its
-  documentation explicitly says otherwise.
-- Boolean predicates should begin with `Is`, `Has`, or `Can`.
+- Classes and structures use `PascalCase`: `AlarmController`, `ServiceState`.
+- Member functions and free functions use `camelCase`: `queueService()`,
+  `parseHttpStatusCode()`.
+- Arduino lifecycle methods keep the Arduino names: `begin()` initializes
+  hardware or state and starts nothing periodic; `update()` performs one
+  non-blocking or bounded step of periodic work and is called from `loop()`.
+- Boolean predicates begin with `is`, `has`, or `can`: `isConnected()`.
+- A `get`-style accessor does not transfer ownership of returned storage
+  unless its documentation says so.
+- Functions and variables with file scope go in an unnamed namespace
+  instead of using `static`.
 
 ## Types and enumerators
 
-- Public typedef names use `PascalCase` and end in `_TypeDef`:
-  `SensorSnapshot_TypeDef`.
-- Structure names describe one object; collection names describe the contained
-  set.
-- Enum constants and bit flags use uppercase `SNAKE_CASE` with a module prefix:
-  `SENSOR_HEALTH_FAILED`.
+- Use `enum class` with a `PascalCase` type name. Enumerators use upper-case
+  `SNAKE_CASE`: `LineReadResult::TIMED_OUT`.
 - Structure members and function parameters use `camelCase`.
-- New code should not introduce `_t` typedef names because POSIX reserves many
-  names with that suffix. Existing Bosch calibration types can be migrated in
-  a separate compatibility-aware refactor.
+- Do not introduce `_t` type names. POSIX reserves many names with that suffix.
 
 ## Variables and constants
 
 - Local variables and parameters use `camelCase`.
-- File-local variables use `camelCase`; their `static` storage already conveys
-  privacy.
-- Compile-time constants and macros use uppercase `SNAKE_CASE`.
-- Macros that behave like functions use uppercase `SNAKE_CASE` and parenthesize
-  every parameter and the complete expression.
-- FreeRTOS handles should identify the owned object, for example
-  `healthTaskHandle`, `networkReadyEvent`, or `tlsMutex`.
+- Private data members use `camelCase` with a leading underscore:
+  `_alarmController`. In C++ this is allowed for class members. Never use an
+  underscore followed by an upper-case letter, or a leading underscore at
+  global or namespace scope; those names are reserved.
+- Compile-time constants use upper-case `SNAKE_CASE` and `constexpr`:
+  `WATCHDOG_TIMEOUT_MS`. Prefer `constexpr` to `#define`.
+- Macros are reserved for configuration that must be overridable by the
+  preprocessor (for example `SECRET_API_TOKEN`). They use upper-case
+  `SNAKE_CASE` and parenthesize every parameter and the complete expression.
+- Variables shared with an interrupt are `volatile` and are no wider than one
+  machine word, or are protected explicitly.
 
 ## Documentation
 
-Document every project-owned function where it is declared. Document a private
-function immediately above its definition or prototype. Do not duplicate a
-complete public API description in both the header and source file.
+Document every public class, function, and structure where it is declared,
+usually in the header. Document a private function in the header or
+immediately above its definition, not in both places.
 
 Function documentation uses this form:
 
-```c
+```cpp
 /**
-  * @brief Perform an authenticated HTTPS HEAD request.
-  * @param hostName (const char*) Non-null DNS host name used for SNI and
-  *        certificate validation.
-  * @param path (const char*) Non-null HTTP request path.
-  * @param result (TlsTransport_ResultTypeDef*) Non-null result storage.
-  * @retval (TlsTransport_StatusTypeDef) Transport completion status.
+  * @brief Read one CRLF- or LF-terminated line with a bounded size and time.
+  * @param client (Client&) Connected client to read from.
+  * @param buffer (char*) Non-null output buffer; always NUL-terminated.
+  * @param capacity (size_t) Size of buffer in bytes; at least 1.
+  * @param timeoutMs (unsigned long) Maximum time to wait for the line.
+  * @retval (LineReadResult) Completion status.
   */
 ```
 
-Use `@param` only for real parameters; omit it for a `void` parameter list.
-Use `@retval` only for functions that return a value. State units, ownership,
-valid ranges, nullability, blocking behavior, and task/interrupt restrictions
-when they matter.
+Use `@param` only for real parameters. Use `@retval` only for functions that
+return a value. State units, ownership, lifetime, valid ranges, nullability,
+blocking time, and interrupt restrictions when they matter. Obvious accessors
+may use a one-line comment or none.
 
 Structure documentation lists the purpose and meaning of every member:
 
-```c
+```cpp
 /**
-  * @brief Result of one HTTPS resource check.
-  * @param statusCode (uint16_t) Parsed HTTP response status.
-  * @param elapsedMs (uint32_t) Total request duration in milliseconds.
-  * @param detail (int32_t) Layer-specific diagnostic value.
+  * @brief Static description of one monitored HTTPS resource.
+  * @param id (const char*) Unique, URL-safe identifier used by the API.
+  * @param intervalMs (unsigned long) Time between checks while healthy.
   */
 ```
 
 ## Compatibility notes
 
-Project-owned adapters may expose conventional names around imported APIs, but
-they must not rewrite vendor interfaces. STM32 HAL callbacks and handles,
-FreeRTOS types, lwIP callbacks, Mbed TLS APIs, CMSIS symbols, and linker/startup
-symbols retain their required upstream spelling.
-
-Names tied to a peripheral register, protocol field, certificate property, or
-datasheet formula should remain traceable to the corresponding specification.
-Compatibility-sensitive renames belong in dedicated refactoring changes.
+Adapters around imported APIs keep the upstream names of the things they wrap.
+Arduino core and library symbols (`WiFi`, `WiFiSSLClient`, `FspTimer`, `WDT`),
+FSP/CMSIS symbols (`R_SYSTEM`, `NVIC_SystemReset`), and linker sections
+(`.noinit`) keep their required spelling.
 
 ---
 

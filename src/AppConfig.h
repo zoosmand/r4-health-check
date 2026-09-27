@@ -12,19 +12,50 @@ constexpr unsigned long SERIAL_BAUD_RATE = 115200UL;
 constexpr unsigned long SERIAL_WAIT_TIMEOUT_MS = 3000UL;
 
 // -----------------------------------------------------------------------------
+// Watchdog
+// -----------------------------------------------------------------------------
+
+// Hardware WDT period. The UNO R4 WDT supports at most ~5592 ms; the value
+// is rounded up to the next supported period. A timer interrupt refreshes the
+// WDT while the main loop is alive (see Watchdog.h).
+constexpr uint32_t WATCHDOG_TIMEOUT_MS = 5000UL;
+
+// Longest allowed gap between watchdog refreshes from the main loop. It must
+// exceed the longest legitimate blocking step: a TLS connect
+// (TLS_CONNECT_TIMEOUT_MS on the module) or one Wi-Fi module command that hits
+// the 10 s WiFiS3 MODEM_TIMEOUT. Several timeouts in a row mean the module is
+// stuck, and a reset is the intended outcome.
+constexpr uint32_t LOOP_WATCHDOG_TIMEOUT_MS = 30000UL;
+
+// After a fatal hardware fault, show the fault pattern this long, then reset
+// the MCU to retry.
+constexpr unsigned long HARDWARE_FAULT_RESTART_MS = 60UL * 1000UL;
+
+// -----------------------------------------------------------------------------
 // API server
 // -----------------------------------------------------------------------------
 
 constexpr uint16_t API_PORT = 80;
 constexpr unsigned long API_CLIENT_TIMEOUT_MS = 1500UL;
 
-// Allow the WiFi coprocessor time to release the previous TLS connection.
-constexpr unsigned long MINIMUM_GAP_BETWEEN_CHECKS_MS = 2000UL;
+// Request size limits protect the 32 KB of SRAM from oversized requests.
+constexpr size_t API_MAX_REQUEST_LINE_LENGTH = 160;
+constexpr size_t API_MAX_HEADER_LINE_LENGTH = 256;
+constexpr size_t API_MAX_HEADER_COUNT = 32;
+
 // -----------------------------------------------------------------------------
 // Wi-Fi
 // -----------------------------------------------------------------------------
 
 constexpr unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000UL;
+
+// WiFi.begin() busy-waits for this long; it blocks the API and health checks.
+// If association takes longer, the module keeps trying in the background and
+// the next update() sees the connection.
+constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 5000UL;
+
+// Raise the network alarm after Wi-Fi has been down this long.
+constexpr unsigned long WIFI_OUTAGE_ALARM_MS = 60UL * 1000UL;
 
 // -----------------------------------------------------------------------------
 // Buzzer
@@ -33,21 +64,43 @@ constexpr unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000UL;
 constexpr uint8_t BUZZER_PIN = 8;
 constexpr bool BUZZER_ACTIVE_HIGH = true;
 
+// Pattern timer rate. 100 Hz gives 10 ms resolution for the beep edges.
+constexpr float BUZZER_TICK_HZ = 100.0f;
+
 constexpr unsigned long BUZZER_TEST_DURATION_MS = 3000UL;
 
-// Alarm pattern:
-// 0-500 ms ON
-// 500-1000 ms OFF
-// 1000-1500 ms ON
-// 1500-6000 ms OFF
-constexpr unsigned long ALARM_PATTERN_PERIOD_MS = 6000UL;
+// Service alarm: 0-500 ms ON, 500-1000 OFF, 1000-1500 ON, 1500-6000 OFF.
+constexpr unsigned long SERVICE_ALARM_PERIOD_MS = 6000UL;
+
+// Network alarm: 0-1500 ms ON, 1500-10000 OFF.
+constexpr unsigned long NETWORK_ALARM_PERIOD_MS = 10000UL;
 
 // -----------------------------------------------------------------------------
-// Health-check defaults
+// Health checks
 // -----------------------------------------------------------------------------
+
+// Allow the Wi-Fi coprocessor time to release the previous TLS connection.
+constexpr unsigned long MINIMUM_GAP_BETWEEN_CHECKS_MS = 2000UL;
 
 constexpr unsigned long DEFAULT_CHECK_INTERVAL_MS = 60UL * 1000UL;
-constexpr unsigned long DEFAULT_HTTP_TIMEOUT_MS = 100000UL;
+
+// Upper bound for waiting on the HTTP response. The wait loops refresh the
+// watchdog, so this may exceed LOOP_WATCHDOG_TIMEOUT_MS.
+constexpr unsigned long DEFAULT_HTTP_TIMEOUT_MS = 10000UL;
+
+// TCP connect + TLS handshake timeout passed to the Wi-Fi module. Without it,
+// the module may wait longer than the R4 side (10 s) and report a stale
+// result later. Older module firmware may not support it: if every check
+// fails with "HTTPS connection failed", update the module firmware or set 0
+// to use the module default.
+constexpr int TLS_CONNECT_TIMEOUT_MS = 8000;
+
+// A service raises the alarm after this many consecutive failed checks.
+constexpr unsigned long FAILURE_THRESHOLD = 2UL;
+
+// After a failed check, retry sooner than the normal interval so that a real
+// outage reaches FAILURE_THRESHOLD quickly.
+constexpr unsigned long FAILURE_RETRY_INTERVAL_MS = 15UL * 1000UL;
 
 // Add or remove entries here.
 //
@@ -62,7 +115,7 @@ constexpr unsigned long DEFAULT_HTTP_TIMEOUT_MS = 100000UL;
 const ServiceConfig SERVICE_CONFIGS[] = {
   {
     "secure",
-    "Intraclear Old Acquring",
+    "Intraclear Old Acquiring",
     "secure.intraclear.com",
     "/",
     443,
@@ -82,7 +135,7 @@ const ServiceConfig SERVICE_CONFIGS[] = {
   },
   {
     "pgw-ic",
-    "Intraclear New Acquring",
+    "Intraclear New Acquiring",
     "pgw.intraclear.com",
     "/",
     443,
@@ -92,7 +145,7 @@ const ServiceConfig SERVICE_CONFIGS[] = {
   },
   {
     "pgw-ac",
-    "Whitelebled Acquring",
+    "White-labeled Acquiring",
     "pgw.anycrypto.io",
     "/",
     443,
@@ -104,5 +157,14 @@ const ServiceConfig SERVICE_CONFIGS[] = {
 
 constexpr size_t SERVICE_COUNT =
   sizeof(SERVICE_CONFIGS) / sizeof(SERVICE_CONFIGS[0]);
+
+static_assert(
+  WIFI_CONNECT_TIMEOUT_MS + 10000UL < LOOP_WATCHDOG_TIMEOUT_MS,
+  "WiFi.begin() plus one module command would outlast the loop watchdog"
+);
+static_assert(
+  static_cast<uint32_t>(TLS_CONNECT_TIMEOUT_MS) + 10000UL < LOOP_WATCHDOG_TIMEOUT_MS,
+  "A TLS connect would outlast the loop watchdog"
+);
 
 #endif

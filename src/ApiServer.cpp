@@ -1,23 +1,50 @@
 #include "ApiServer.h"
 #include "AppConfig.h"
+#include "HttpLineReader.h"
+#include "TextParsing.h"
+
+namespace
+{
+constexpr size_t METHOD_CAPACITY = 8;
+constexpr char SERVICES_PREFIX[] = "/api/services/";
+constexpr char CHECK_SUFFIX[] = "/check";
+
+unsigned long remainingMs(unsigned long startedAt, unsigned long budgetMs)
+{
+  const unsigned long elapsed = millis() - startedAt;
+  return elapsed < budgetMs ? budgetMs - elapsed : 0;
+}
+}  // namespace
 
 ApiServer::ApiServer(
   uint16_t port,
+  const char *apiToken,
   NetworkManager &networkManager,
   HealthChecker &healthChecker,
-  AlarmController &alarmController
+  AlarmController &alarmController,
+  Watchdog &watchdog
 )
   : _server(port),
+    _apiToken(apiToken),
+    _lastResetByWatchdog(false),
     _networkManager(networkManager),
     _healthChecker(healthChecker),
-    _alarmController(alarmController)
+    _alarmController(alarmController),
+    _watchdog(watchdog)
 {
 }
 
-void ApiServer::begin()
+void ApiServer::begin(bool lastResetByWatchdog)
 {
+  _lastResetByWatchdog = lastResetByWatchdog;
+
   _server.begin();
   Serial.println(F("API server started."));
+
+  if (_apiToken[0] == '\0')
+  {
+    Serial.println(F("WARNING: API token not set; POST endpoints are open."));
+  }
 }
 
 void ApiServer::update()
@@ -35,110 +62,165 @@ void ApiServer::update()
 
 void ApiServer::printEndpoints() const
 {
+  static const char *const ENDPOINTS[] = {
+    "GET  /api/status",
+    "GET  /api/services",
+    "GET  /api/services/{id}",
+    "POST /api/check",
+    "POST /api/services/{id}/check",
+    "POST /api/buzzer/test",
+    "POST /api/buzzer/silence",
+    "POST /api/buzzer/unsilence"
+  };
+
   const IPAddress ip = _networkManager.localIp();
 
   Serial.println(F("API endpoints:"));
 
-  Serial.print(F("  GET  http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/status"));
+  for (const char *endpoint : ENDPOINTS)
+  {
+    // "METHOD /path" -> "  METHOD http://<ip>/path"
+    const char *path = strchr(endpoint, '/');
 
-  Serial.print(F("  GET  http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/services"));
-
-  Serial.print(F("  GET  http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/services/{id}"));
-
-  Serial.print(F("  POST http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/check"));
-
-  Serial.print(F("  POST http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/services/{id}/check"));
-
-  Serial.print(F("  POST http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/buzzer/test"));
-
-  Serial.print(F("  POST http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/buzzer/silence"));
-
-  Serial.print(F("  POST http://"));
-  Serial.print(ip);
-  Serial.println(F("/api/buzzer/unsilence"));
+    Serial.print(F("  "));
+    Serial.write(endpoint, static_cast<size_t>(path - endpoint));
+    Serial.print(F("http://"));
+    Serial.print(ip);
+    Serial.println(path);
+  }
 }
 
 void ApiServer::handleClient(WiFiClient &client)
 {
-  client.setTimeout(API_CLIENT_TIMEOUT_MS);
+  const unsigned long startedAt = millis();
 
-  const unsigned long requestStartedAt = millis();
+  char requestLine[API_MAX_REQUEST_LINE_LENGTH + 1];
+  const LineReadResult requestResult = readHttpLine(
+    client,
+    requestLine,
+    sizeof(requestLine),
+    API_CLIENT_TIMEOUT_MS,
+    _watchdog
+  );
 
-  while (!client.available() &&
-         client.connected() &&
-         millis() - requestStartedAt < API_CLIENT_TIMEOUT_MS)
-  {
-    _alarmController.update();
-  }
-
-  if (!client.available())
+  if (requestResult == LineReadResult::TIMED_OUT ||
+      requestResult == LineReadResult::CLOSED)
   {
     return;
   }
 
-  String requestLine = client.readStringUntil('\n');
-  requestLine.trim();
-
-  // Consume headers. This API currently has no request body.
-  while (client.connected())
+  if (requestResult == LineReadResult::TRUNCATED)
   {
-    if (!client.available())
+    sendError(client, 414, "URI Too Long", "Request line too long");
+    return;
+  }
+
+  // Read the headers; only Authorization is used. This API has no bodies.
+  bool authorized = _apiToken[0] == '\0';
+  bool headersComplete = false;
+  char headerLine[API_MAX_HEADER_LINE_LENGTH + 1];
+
+  for (size_t count = 0; count <= API_MAX_HEADER_COUNT; count++)
+  {
+    const unsigned long budget = remainingMs(startedAt, API_CLIENT_TIMEOUT_MS);
+
+    if (budget == 0)
     {
       break;
     }
 
-    String headerLine = client.readStringUntil('\n');
-    headerLine.trim();
+    const LineReadResult headerResult = readHttpLine(
+      client,
+      headerLine,
+      sizeof(headerLine),
+      budget,
+      _watchdog
+    );
 
-    if (headerLine.length() == 0)
+    if (headerResult == LineReadResult::TIMED_OUT ||
+        headerResult == LineReadResult::CLOSED)
     {
       break;
+    }
+
+    if (headerResult == LineReadResult::TRUNCATED)
+    {
+      sendError(
+        client,
+        431,
+        "Request Header Fields Too Large",
+        "Header line too long"
+      );
+      return;
+    }
+
+    if (headerLine[0] == '\0')
+    {
+      headersComplete = true;
+      break;
+    }
+
+    const char *authorization = matchHttpHeader(headerLine, "Authorization");
+
+    if (authorization != nullptr &&
+        _apiToken[0] != '\0' &&
+        strncmp(authorization, "Bearer ", 7) == 0 &&
+        constantTimeEquals(_apiToken, authorization + 7))
+    {
+      authorized = true;
     }
   }
 
-  const int firstSpace = requestLine.indexOf(' ');
-  const int secondSpace = requestLine.indexOf(' ', firstSpace + 1);
+  if (!headersComplete)
+  {
+    sendError(client, 400, "Bad Request", "Incomplete or oversized headers");
+    return;
+  }
 
-  if (firstSpace <= 0 || secondSpace <= firstSpace)
+  char method[METHOD_CAPACITY];
+  char path[API_MAX_REQUEST_LINE_LENGTH + 1];
+
+  if (!parseHttpRequestLine(
+        requestLine,
+        method,
+        sizeof(method),
+        path,
+        sizeof(path)
+      ))
   {
     sendError(client, 400, "Bad Request", "Invalid HTTP request");
     return;
   }
-
-  const String method = requestLine.substring(0, firstSpace);
-  const String path = requestLine.substring(firstSpace + 1, secondSpace);
 
   Serial.print(F("API request: "));
   Serial.print(method);
   Serial.print(' ');
   Serial.println(path);
 
-  routeRequest(client, method, path);
+  routeRequest(client, method, path, authorized);
 }
 
 void ApiServer::routeRequest(
   WiFiClient &client,
-  const String &method,
-  const String &path
+  const char *method,
+  const char *path,
+  bool authorized
 )
 {
-  if (path == "/api/status")
+  const bool isGet = strcmp(method, "GET") == 0;
+  const bool isPost = strcmp(method, "POST") == 0;
+
+  // Every state-changing endpoint is a POST, so authorization is checked
+  // once here, before routing.
+  if (isPost && !authorized)
   {
-    if (method != "GET")
+    sendError(client, 401, "Unauthorized", "Missing or invalid bearer token");
+    return;
+  }
+
+  if (strcmp(path, "/api/status") == 0)
+  {
+    if (!isGet)
     {
       sendError(client, 405, "Method Not Allowed", "Use GET");
       return;
@@ -148,9 +230,9 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (path == "/api/services")
+  if (strcmp(path, "/api/services") == 0)
   {
-    if (method != "GET")
+    if (!isGet)
     {
       sendError(client, 405, "Method Not Allowed", "Use GET");
       return;
@@ -160,9 +242,9 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (path == "/api/check")
+  if (strcmp(path, "/api/check") == 0)
   {
-    if (method != "POST")
+    if (!isPost)
     {
       sendError(client, 405, "Method Not Allowed", "Use POST");
       return;
@@ -179,83 +261,72 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (path == "/api/buzzer/test")
+  if (strcmp(path, "/api/buzzer/test") == 0)
   {
-    if (method != "POST")
+    if (!isPost)
     {
       sendError(client, 405, "Method Not Allowed", "Use POST");
       return;
     }
 
     _alarmController.startTest();
-
-    sendJson(
-      client,
-      200,
-      "OK",
-      "{\"result\":\"Buzzer test started\"}"
-    );
+    sendJson(client, 200, "OK", "{\"result\":\"Buzzer test started\"}");
     return;
   }
 
-  if (path == "/api/buzzer/silence")
+  if (strcmp(path, "/api/buzzer/silence") == 0)
   {
-    if (method != "POST")
+    if (!isPost)
     {
       sendError(client, 405, "Method Not Allowed", "Use POST");
       return;
     }
 
     _alarmController.silence();
-
-    sendJson(
-      client,
-      200,
-      "OK",
-      "{\"result\":\"Alarm silenced\"}"
-    );
+    sendJson(client, 200, "OK", "{\"result\":\"Alarm silenced\"}");
     return;
   }
 
-  if (path == "/api/buzzer/unsilence")
+  if (strcmp(path, "/api/buzzer/unsilence") == 0)
   {
-    if (method != "POST")
+    if (!isPost)
     {
       sendError(client, 405, "Method Not Allowed", "Use POST");
       return;
     }
 
     _alarmController.unsilence();
-
-    sendJson(
-      client,
-      200,
-      "OK",
-      "{\"result\":\"Alarm enabled\"}"
-    );
+    sendJson(client, 200, "OK", "{\"result\":\"Alarm enabled\"}");
     return;
   }
 
-  const String prefix = "/api/services/";
+  const size_t prefixLength = sizeof(SERVICES_PREFIX) - 1;
 
-  if (path.startsWith(prefix))
+  if (strncmp(path, SERVICES_PREFIX, prefixLength) == 0)
   {
-    String remainder = path.substring(prefix.length());
+    char serviceId[API_MAX_REQUEST_LINE_LENGTH + 1];
+    strncpy(serviceId, path + prefixLength, sizeof(serviceId) - 1);
+    serviceId[sizeof(serviceId) - 1] = '\0';
+
+    const size_t suffixLength = sizeof(CHECK_SUFFIX) - 1;
+    size_t idLength = strlen(serviceId);
     bool checkRequest = false;
 
-    if (remainder.endsWith("/check"))
+    if (idLength > suffixLength &&
+        strcmp(serviceId + idLength - suffixLength, CHECK_SUFFIX) == 0)
     {
       checkRequest = true;
-      remainder.remove(remainder.length() - 6);
+      idLength -= suffixLength;
+      serviceId[idLength] = '\0';
     }
 
-    if (remainder.length() == 0 || remainder.indexOf('/') >= 0)
+    if (idLength == 0 || strchr(serviceId, '/') != nullptr)
     {
       sendError(client, 404, "Not Found", "Service endpoint not found");
       return;
     }
 
-    const int serviceIndex = _healthChecker.findServiceIndex(remainder);
+    const int serviceIndex = _healthChecker.findServiceIndex(serviceId);
 
     if (serviceIndex < 0)
     {
@@ -265,23 +336,27 @@ void ApiServer::routeRequest(
 
     if (checkRequest)
     {
-      if (method != "POST")
+      if (!isPost)
       {
         sendError(client, 405, "Method Not Allowed", "Use POST");
         return;
       }
 
-      _healthChecker.queueService(static_cast<size_t>(serviceIndex));
+      if (!_healthChecker.queueService(static_cast<size_t>(serviceIndex)))
+      {
+        sendError(client, 409, "Conflict", "Service is disabled");
+        return;
+      }
 
       String json = "{\"result\":\"Service queued for checking\",\"service_id\":\"";
-      json += escapeJson(remainder);
+      json += escapeJson(serviceId);
       json += "\"}";
 
       sendJson(client, 202, "Accepted", json);
       return;
     }
 
-    if (method != "GET")
+    if (!isGet)
     {
       sendError(client, 405, "Method Not Allowed", "Use GET");
       return;
@@ -297,10 +372,11 @@ void ApiServer::routeRequest(
 void ApiServer::sendOverview(WiFiClient &client)
 {
   String json;
-  json.reserve(500);
+  json.reserve(640);
 
   json += "{";
   json += "\"device\":\"UNO R4 WiFi Multi-Service Health Checker\",";
+
   json += "\"wifi_connected\":";
   json += boolJson(_networkManager.isConnected());
   json += ",";
@@ -321,8 +397,8 @@ void ApiServer::sendOverview(WiFiClient &client)
   json += String(_healthChecker.checkedServiceCount());
   json += ",";
 
-  json += "\"unhealthy_service_count\":";
-  json += String(_healthChecker.unhealthyServiceCount());
+  json += "\"failing_service_count\":";
+  json += String(_healthChecker.failingServiceCount());
   json += ",";
 
   json += "\"all_checked_services_healthy\":";
@@ -333,12 +409,32 @@ void ApiServer::sendOverview(WiFiClient &client)
   json += boolJson(_alarmController.isAlarmActive());
   json += ",";
 
+  json += "\"service_alarm_active\":";
+  json += boolJson(_alarmController.isServiceAlarmActive());
+  json += ",";
+
+  json += "\"network_alarm_active\":";
+  json += boolJson(_alarmController.isNetworkAlarmActive());
+  json += ",";
+
   json += "\"buzzer_silenced\":";
   json += boolJson(_alarmController.isSilenced());
   json += ",";
 
   json += "\"buzzer_test_active\":";
   json += boolJson(_alarmController.isTestActive());
+  json += ",";
+
+  json += "\"watchdog_timeout_ms\":";
+  json += String(_watchdog.hardwareTimeoutMs());
+  json += ",";
+
+  json += "\"loop_watchdog_timeout_ms\":";
+  json += String(_watchdog.loopTimeoutMs());
+  json += ",";
+
+  json += "\"last_reset_by_watchdog\":";
+  json += boolJson(_lastResetByWatchdog);
   json += ",";
 
   json += "\"uptime_ms\":";
@@ -352,7 +448,7 @@ void ApiServer::sendOverview(WiFiClient &client)
 void ApiServer::sendServices(WiFiClient &client)
 {
   String json;
-  json.reserve(700 + _healthChecker.serviceCount() * 450);
+  json.reserve(16 + _healthChecker.serviceCount() * 560);
 
   json += "{\"services\":[";
 
@@ -382,7 +478,7 @@ String ApiServer::buildServiceJson(size_t index) const
   const ServiceState &state = _healthChecker.stateAt(index);
 
   String json;
-  json.reserve(500);
+  json.reserve(560);
 
   json += "{";
 
@@ -421,6 +517,10 @@ String ApiServer::buildServiceJson(size_t index) const
 
   json += "\"healthy\":";
   json += boolJson(state.healthy);
+  json += ",";
+
+  json += "\"failing\":";
+  json += boolJson(state.failing);
   json += ",";
 
   json += "\"check_queued\":";
@@ -474,20 +574,36 @@ void ApiServer::sendJson(
   const String &json
 )
 {
-  client.print(F("HTTP/1.1 "));
-  client.print(statusCode);
-  client.print(' ');
-  client.println(statusText);
+  // Build the header block in one buffer: every client write is a separate
+  // Wi-Fi module command.
+  char header[192];
+  const int headerLength = snprintf(
+    header,
+    sizeof(header),
+    "HTTP/1.1 %d %s\r\n"
+    "Content-Type: application/json; charset=utf-8\r\n"
+    "Cache-Control: no-store\r\n"
+    "Connection: close\r\n"
+    "%s"
+    "Content-Length: %u\r\n"
+    "\r\n",
+    statusCode,
+    statusText,
+    statusCode == 401 ? "WWW-Authenticate: Bearer\r\n" : "",
+    json.length()
+  );
 
-  client.println(F("Content-Type: application/json; charset=utf-8"));
-  client.println(F("Cache-Control: no-store"));
-  client.println(F("Connection: close"));
-
-  client.print(F("Content-Length: "));
-  client.println(json.length());
-
-  client.println();
-  client.print(json);
+  if (headerLength > 0 && static_cast<size_t>(headerLength) < sizeof(header))
+  {
+    client.write(
+      reinterpret_cast<const uint8_t *>(header),
+      static_cast<size_t>(headerLength)
+    );
+    client.write(
+      reinterpret_cast<const uint8_t *>(json.c_str()),
+      json.length()
+    );
+  }
 }
 
 void ApiServer::sendError(
@@ -504,41 +620,17 @@ void ApiServer::sendError(
   sendJson(client, statusCode, statusText, json);
 }
 
-String ApiServer::escapeJson(const String &value) const
+String ApiServer::escapeJson(const char *value) const
 {
   String result;
-  result.reserve(value.length() + 8);
+  result.reserve(strlen(value) + 8);
 
-  for (unsigned int i = 0; i < value.length(); i++)
+  char escaped[7];
+
+  for (const char *c = value; *c != '\0'; c++)
   {
-    const char c = value.charAt(i);
-
-    switch (c)
-    {
-      case '"':
-        result += "\\\"";
-        break;
-
-      case '\\':
-        result += "\\\\";
-        break;
-
-      case '\n':
-        result += "\\n";
-        break;
-
-      case '\r':
-        result += "\\r";
-        break;
-
-      case '\t':
-        result += "\\t";
-        break;
-
-      default:
-        result += c;
-        break;
-    }
+    escapeJsonChar(*c, escaped);
+    result += escaped;
   }
 
   return result;

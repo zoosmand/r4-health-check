@@ -1,17 +1,39 @@
 #include "HealthChecker.h"
 #include "AppConfig.h"
+#include "HttpLineReader.h"
+#include "TextParsing.h"
 #include "WiFiS3.h"
+
+namespace
+{
+constexpr size_t STATUS_LINE_CAPACITY = 64;
+constexpr size_t HEADER_LINE_CAPACITY = 128;
+constexpr size_t REQUEST_CAPACITY = 256;
+
+/**
+  * @brief Time left of a budget that started at startedAt.
+  * @retval (unsigned long) Remaining milliseconds, or 0 when expired.
+  */
+unsigned long remainingMs(unsigned long startedAt, unsigned long budgetMs)
+{
+  const unsigned long elapsed = millis() - startedAt;
+  return elapsed < budgetMs ? budgetMs - elapsed : 0;
+}
+}  // namespace
 
 HealthChecker::HealthChecker(
   const ServiceConfig *configs,
   size_t serviceCount,
-  AlarmController &alarmController
+  AlarmController &alarmController,
+  Watchdog &watchdog
 )
   : _configs(configs),
     _serviceCount(serviceCount),
     _states(nullptr),
     _alarmController(alarmController),
-    _roundRobinCursor(0)
+    _watchdog(watchdog),
+    _roundRobinCursor(0),
+    _nextCheckAllowedAtMs(0)
 {
   _states = new ServiceState[_serviceCount];
 }
@@ -23,26 +45,33 @@ HealthChecker::~HealthChecker()
 
 void HealthChecker::begin()
 {
+  const unsigned long now = millis();
+
   for (size_t i = 0; i < _serviceCount; i++)
   {
-    _states[i].checked = false;
-    _states[i].healthy = false;
-    _states[i].checkQueued = _configs[i].enabled;
-    _states[i].checkInProgress = false;
+    ServiceState &state = _states[i];
 
-    _states[i].httpStatus = 0;
+    state.checked = false;
+    state.healthy = false;
+    state.failing = false;
+    state.checkQueued = _configs[i].enabled;
+    state.checkInProgress = false;
 
-    _states[i].lastCheckStartedAtMs = 0;
-    _states[i].lastCheckCompletedAtMs = 0;
-    _states[i].lastCheckDurationMs = 0;
-    _states[i].nextCheckAtMs = 0;
+    state.httpStatus = 0;
 
-    _states[i].successfulChecks = 0;
-    _states[i].failedChecks = 0;
-    _states[i].consecutiveFailures = 0;
+    state.lastCheckStartedAtMs = 0;
+    state.lastCheckCompletedAtMs = 0;
+    state.lastCheckDurationMs = 0;
+    state.nextCheckAtMs = now;
 
-    _states[i].lastError = "Not checked";
+    state.successfulChecks = 0;
+    state.failedChecks = 0;
+    state.consecutiveFailures = 0;
+
+    state.lastError = "Not checked";
   }
+
+  refreshAlarmState();
 }
 
 void HealthChecker::update()
@@ -54,21 +83,18 @@ void HealthChecker::update()
 
   const unsigned long now = millis();
 
-  /*
-    Do not start another TLS connection immediately after the previous one.
-
-    The signed subtraction keeps the millis() rollover comparison safe.
-  */
+  // Do not start another TLS connection immediately after the previous one.
+  // The signed difference keeps the comparison correct across millis()
+  // rollover.
   if (static_cast<long>(now - _nextCheckAllowedAtMs) < 0)
   {
     return;
   }
 
-  // Perform no more than one check during one loop iteration.
+  // Perform no more than one check per call.
   for (size_t offset = 0; offset < _serviceCount; offset++)
   {
-    const size_t index =
-      (_roundRobinCursor + offset) % _serviceCount;
+    const size_t index = (_roundRobinCursor + offset) % _serviceCount;
 
     if (!_configs[index].enabled)
     {
@@ -79,7 +105,6 @@ void HealthChecker::update()
 
     const bool due =
       state.checkQueued ||
-      !state.checked ||
       static_cast<long>(now - state.nextCheckAtMs) >= 0;
 
     if (!due || state.checkInProgress)
@@ -88,19 +113,12 @@ void HealthChecker::update()
     }
 
     state.checkQueued = false;
-
-    _roundRobinCursor =
-      (index + 1) % _serviceCount;
+    _roundRobinCursor = (index + 1) % _serviceCount;
 
     performCheck(index);
 
-    /*
-      Give the ESP32-S3 networking module time to close and release the
-      previous TLS socket before opening another connection.
-    */
-    _nextCheckAllowedAtMs =
-      millis() + MINIMUM_GAP_BETWEEN_CHECKS_MS;
-
+    // Give the Wi-Fi module time to release the previous TLS socket.
+    _nextCheckAllowedAtMs = millis() + MINIMUM_GAP_BETWEEN_CHECKS_MS;
     return;
   }
 }
@@ -120,11 +138,11 @@ const ServiceState &HealthChecker::stateAt(size_t index) const
   return _states[index];
 }
 
-int HealthChecker::findServiceIndex(const String &id) const
+int HealthChecker::findServiceIndex(const char *id) const
 {
   for (size_t i = 0; i < _serviceCount; i++)
   {
-    if (id == _configs[i].id)
+    if (strcmp(id, _configs[i].id) == 0)
     {
       return static_cast<int>(i);
     }
@@ -155,19 +173,19 @@ bool HealthChecker::queueService(size_t index)
   return true;
 }
 
-bool HealthChecker::anyServiceUnhealthy() const
+size_t HealthChecker::failingServiceCount() const
 {
+  size_t result = 0;
+
   for (size_t i = 0; i < _serviceCount; i++)
   {
-    if (_configs[i].enabled &&
-        _states[i].checked &&
-        !_states[i].healthy)
+    if (_configs[i].enabled && _states[i].failing)
     {
-      return true;
+      result++;
     }
   }
 
-  return false;
+  return result;
 }
 
 bool HealthChecker::allCheckedServicesHealthy() const
@@ -190,23 +208,6 @@ bool HealthChecker::allCheckedServicesHealthy() const
   }
 
   return foundCheckedService;
-}
-
-size_t HealthChecker::unhealthyServiceCount() const
-{
-  size_t result = 0;
-
-  for (size_t i = 0; i < _serviceCount; i++)
-  {
-    if (_configs[i].enabled &&
-        _states[i].checked &&
-        !_states[i].healthy)
-    {
-      result++;
-    }
-  }
-
-  return result;
 }
 
 size_t HealthChecker::checkedServiceCount() const
@@ -241,153 +242,198 @@ void HealthChecker::performCheck(size_t index)
   Serial.print(config.host);
   Serial.println(config.path);
 
-  bool healthy = false;
-  WiFiSSLClient client;
+  const bool healthy = runRequest(config, state);
 
-  client.setTimeout(config.timeoutMs);
+  state.lastCheckCompletedAtMs = millis();
+  state.lastCheckDurationMs =
+    state.lastCheckCompletedAtMs - state.lastCheckStartedAtMs;
+  state.checkInProgress = false;
 
+  recordResult(index, healthy);
+}
 
+bool HealthChecker::runRequest(const ServiceConfig &config, ServiceState &state)
+{
   IPAddress resolvedIp;
 
-  Serial.print(F("Resolving host: "));
-  Serial.println(config.host);
+  _watchdog.refresh();
 
   if (WiFi.hostByName(config.host, resolvedIp) != 1)
   {
     state.lastError = "DNS resolution failed";
+    return false;
+  }
 
-    Serial.print(F("DNS resolution failed for: "));
-    Serial.println(config.host);
+  Serial.print(F("Resolved IP: "));
+  Serial.println(resolvedIp);
+
+  WiFiSSLClient client;
+
+  if (TLS_CONNECT_TIMEOUT_MS > 0)
+  {
+    client.setConnectionTimeout(TLS_CONNECT_TIMEOUT_MS);
+  }
+
+  _watchdog.refresh();
+
+  if (!client.connect(config.host, config.port))
+  {
+    state.lastError = "HTTPS connection failed";
+
+    // connect() allocates a socket on the Wi-Fi module even when it fails,
+    // and ~WiFiSSLClient() does not release it.
+    _watchdog.refresh();
+    client.stop();
+    return false;
+  }
+
+  _watchdog.refresh();
+
+  // Send the whole request in one write: each write is a separate command
+  // to the Wi-Fi module.
+  char request[REQUEST_CAPACITY];
+  const int requestLength = snprintf(
+    request,
+    sizeof(request),
+    "HEAD %s HTTP/1.1\r\n"
+    "Host: %s\r\n"
+    "User-Agent: UNO-R4-Health-Checker/3.0\r\n"
+    "Accept: */*\r\n"
+    "Connection: close\r\n"
+    "\r\n",
+    config.path,
+    config.host
+  );
+
+  bool healthy = false;
+
+  if (requestLength <= 0 || static_cast<size_t>(requestLength) >= sizeof(request))
+  {
+    state.lastError = "Request too long";
+  }
+  else if (client.write(
+             reinterpret_cast<const uint8_t *>(request),
+             static_cast<size_t>(requestLength)
+           ) != static_cast<size_t>(requestLength))
+  {
+    state.lastError = "HTTPS write failed";
   }
   else
   {
-    Serial.print(F("Resolved IP: "));
-    Serial.println(resolvedIp);
+    const unsigned long responseStartedAt = millis();
 
-    Serial.print(F("Opening TLS connection to: "));
-    Serial.print(config.host);
-    Serial.print(':');
-    Serial.println(config.port);
+    char statusLine[STATUS_LINE_CAPACITY];
+    const LineReadResult statusResult = readHttpLine(
+      client,
+      statusLine,
+      sizeof(statusLine),
+      config.timeoutMs,
+      _watchdog
+    );
 
-    if (!client.connect(config.host, config.port))
+    if (statusResult == LineReadResult::TIMED_OUT)
     {
-      state.lastError = "HTTPS connection failed";
-
-      Serial.print(F("TLS connection failed for host: "));
-      Serial.print(config.host);
-      Serial.print(F(", port: "));
-      Serial.println(config.port);
+      state.lastError = "HTTP response timeout";
+    }
+    else if (statusResult == LineReadResult::CLOSED)
+    {
+      state.lastError = "Connection closed before response";
     }
     else
     {
-      client.print(F("HEAD "));
-      client.print(config.path);
-      client.println(F(" HTTP/1.1"));
+      // An overlong status line is truncated; the code is at its start.
+      Serial.print(F("Response: "));
+      Serial.println(statusLine);
 
-      client.print(F("Host: "));
-      client.println(config.host);
+      state.httpStatus = parseHttpStatusCode(statusLine);
 
-      client.println(F("User-Agent: UNO-R4-Health-Checker/2.0"));
-      client.println(F("Accept: */*"));
-      client.println(F("Connection: close"));
-      client.println();
-
-      const unsigned long waitStartedAt = millis();
-
-      while (!client.available() &&
-            client.connected() &&
-            millis() - waitStartedAt < config.timeoutMs)
+      if (state.httpStatus == 0)
       {
-        _alarmController.update();
-        delay(1);
+        state.lastError = "Invalid HTTP status line";
       }
-
-      if (!client.available())
+      else if (state.httpStatus == 200)
       {
-        state.lastError = "HTTP response timeout";
+        healthy = true;
       }
       else
       {
-        String statusLine = client.readStringUntil('\n');
-        statusLine.trim();
-
-        Serial.print(F("Response: "));
-        Serial.println(statusLine);
-
-        state.httpStatus = parseStatusCode(statusLine);
-
-        if (state.httpStatus <= 0)
-        {
-          state.lastError = "Invalid HTTP status line";
-        }
-        else if (state.httpStatus == 200)
-        {
-          healthy = true;
-        }
-        else
-        {
-          state.lastError = "Unexpected HTTP status";
-        }
-
-        /*
-          Consume the remaining HTTP response headers.
-
-          Even though HEAD responses have no body, leaving unread headers in the
-          socket can interfere with closing and recycling the connection.
-        */
-        const unsigned long headersStartedAt = millis();
-
-        while (millis() - headersStartedAt < config.timeoutMs)
-        {
-          if (client.available())
-          {
-            String headerLine = client.readStringUntil('\n');
-
-            if (headerLine == "\r" || headerLine.length() == 0)
-            {
-              break;
-            }
-          }
-          else if (!client.connected())
-          {
-            break;
-          }
-          else
-          {
-            _alarmController.update();
-            delay(1);
-          }
-        }
+        state.lastError = "Unexpected HTTP status";
       }
 
-      /*
-        Ask the WiFi coprocessor to close the TLS connection.
-      */
-      client.stop();
+      // Drain the response headers so the module can close the socket
+      // cleanly. HEAD responses have no body.
+      char headerLine[HEADER_LINE_CAPACITY];
 
-      /*
-        Let commands and socket state propagate to the connectivity module.
-        The longer inter-service gap is still enforced by update().
-      */
-      delay(50);
+      while (true)
+      {
+        const unsigned long budget =
+          remainingMs(responseStartedAt, config.timeoutMs);
+
+        if (budget == 0)
+        {
+          break;
+        }
+
+        const LineReadResult headerResult = readHttpLine(
+          client,
+          headerLine,
+          sizeof(headerLine),
+          budget,
+          _watchdog
+        );
+
+        if (headerResult == LineReadResult::TIMED_OUT ||
+            headerResult == LineReadResult::CLOSED ||
+            (headerResult == LineReadResult::COMPLETE && headerLine[0] == '\0'))
+        {
+          break;
+        }
+      }
     }
   }
 
-  state.lastCheckDurationMs = millis() - state.lastCheckStartedAtMs;
-  state.lastCheckCompletedAtMs = millis();
-  state.nextCheckAtMs =
-    state.lastCheckCompletedAtMs + config.intervalMs;
+  _watchdog.refresh();
+  client.stop();
+
+  // Let the close propagate to the module. The longer inter-service gap is
+  // enforced by update().
+  delay(50);
+
+  return healthy;
+}
+
+void HealthChecker::recordResult(size_t index, bool healthy)
+{
+  const ServiceConfig &config = _configs[index];
+  ServiceState &state = _states[index];
+
+  const bool wasFailing = state.failing;
 
   state.checked = true;
   state.healthy = healthy;
-  state.checkInProgress = false;
 
   if (healthy)
   {
     state.successfulChecks++;
     state.consecutiveFailures = 0;
     state.lastError = "";
+  }
+  else
+  {
+    state.failedChecks++;
+    state.consecutiveFailures++;
+  }
 
+  state.failing = state.consecutiveFailures >= FAILURE_THRESHOLD;
+
+  const unsigned long delayMs =
+    healthy ? config.intervalMs
+            : min(config.intervalMs, FAILURE_RETRY_INTERVAL_MS);
+
+  state.nextCheckAtMs = state.lastCheckCompletedAtMs + delayMs;
+
+  if (healthy)
+  {
     Serial.print(F("Service healthy: "));
     Serial.print(config.id);
     Serial.print(F(", HTTP "));
@@ -395,9 +441,6 @@ void HealthChecker::performCheck(size_t index)
   }
   else
   {
-    state.failedChecks++;
-    state.consecutiveFailures++;
-
     Serial.print(F("Service unhealthy: "));
     Serial.print(config.id);
     Serial.print(F(", error: "));
@@ -408,33 +451,26 @@ void HealthChecker::performCheck(size_t index)
       Serial.print(F(", HTTP "));
       Serial.print(state.httpStatus);
     }
+
+    Serial.print(F(", consecutive failures: "));
+    Serial.print(state.consecutiveFailures);
   }
 
   Serial.print(F(", duration "));
   Serial.print(state.lastCheckDurationMs);
   Serial.println(F(" ms"));
 
+  // A service that newly crosses the threshold re-arms a silenced buzzer
+  // even when other services are already failing.
+  if (state.failing && !wasFailing)
+  {
+    _alarmController.notifyNewFault();
+  }
+
   refreshAlarmState();
-}
-
-int HealthChecker::parseStatusCode(const String &statusLine) const
-{
-  if (!statusLine.startsWith("HTTP/"))
-  {
-    return 0;
-  }
-
-  const int firstSpace = statusLine.indexOf(' ');
-
-  if (firstSpace < 0 || statusLine.length() < firstSpace + 4)
-  {
-    return 0;
-  }
-
-  return statusLine.substring(firstSpace + 1, firstSpace + 4).toInt();
 }
 
 void HealthChecker::refreshAlarmState()
 {
-  _alarmController.setAlarmActive(anyServiceUnhealthy());
+  _alarmController.setServiceAlarm(failingServiceCount() > 0);
 }
