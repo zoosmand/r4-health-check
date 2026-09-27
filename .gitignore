@@ -96,3 +96,5 @@ Core/.DS_Store
 *.jks
 *.csr
 *.ssh/
+
+arduino_secrets.h
