@@ -44,7 +44,7 @@ before continuing.
 - Keep project-owned sources in `src/UNO_R4_Health_Checker/`, host tests in `test/`, and helper
   scripts in `tools/`.
 - Do not modify the Arduino core or its bundled libraries (`WiFiS3`, `WDT`,
-  `FspTimer`). Wrap them instead. See
+  `Arduino_LED_Matrix`, `FspTimer`). Wrap them instead. See
   [the third-party source notes](IGNORED_SOURCES.md).
 - Keep Arduino-independent logic (parsing, formatting) in modules that do not
   include Arduino headers, and cover it with host tests.

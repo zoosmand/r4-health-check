@@ -104,7 +104,8 @@ Structure documentation lists the purpose and meaning of every member:
 ## Compatibility notes
 
 Adapters around imported APIs keep the upstream names of the things they wrap.
-Arduino core and library symbols (`WiFi`, `WiFiSSLClient`, `FspTimer`, `WDT`),
+Arduino core and library symbols (`WiFi`, `WiFiSSLClient`, `FspTimer`, `WDT`,
+`ArduinoLEDMatrix`),
 FSP/CMSIS symbols (`R_SYSTEM`, `NVIC_SystemReset`), and linker sections
 (`.noinit`) keep their required spelling.
 

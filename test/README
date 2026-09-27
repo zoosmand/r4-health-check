@@ -37,9 +37,12 @@ Run these by hand after changes that affect hardware behavior:
    sounds and `failing_service_count` is 1.
 3. Silence and re-arm: silence the alarm, then make a second service fail.
    The buzzer sounds again.
-4. Network alarm: switch off the access point. After 60 s the long-beep
+4. LED matrix: while a service is failing, the matrix shows the caution
+   triangle, including while the buzzer is silenced. It turns off after the
+   service recovers.
+5. Network alarm: switch off the access point. After 60 s the long-beep
    pattern sounds. It stops after Wi-Fi reconnects.
-5. Watchdog: temporarily add an endless loop without a watchdog refresh to
+6. Watchdog: temporarily add an endless loop without a watchdog refresh to
    `loop()`. The board resets within about 36 s and logs
    `WARNING: restarted by the watchdog.` `GET /api/status` then reports
    `"last_reset_by_watchdog":true`.

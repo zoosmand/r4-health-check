@@ -2,6 +2,7 @@
 #include "AlarmController.h"
 #include "NetworkManager.h"
 #include "HealthChecker.h"
+#include "StatusDisplay.h"
 #include "ApiServer.h"
 #include "Watchdog.h"
 #include "arduino_secrets.h"
@@ -15,6 +16,8 @@
 Watchdog watchdog;
 
 AlarmController alarmController(BUZZER_PIN, BUZZER_ACTIVE_HIGH);
+
+StatusDisplay statusDisplay;
 
 NetworkManager networkManager(
   SECRET_SSID,
@@ -111,6 +114,13 @@ void setup()
     Serial.println(F("ERROR: watchdog could not be started."));
   }
 
+  // The watchdog and buzzer are started first so that they get a hardware
+  // timer even if the timers run out.
+  if (!statusDisplay.begin())
+  {
+    Serial.println(F("WARNING: no hardware timer; LED matrix disabled."));
+  }
+
   healthChecker.begin();
 
   if (!networkManager.begin())
@@ -138,6 +148,7 @@ void loop()
   {
     apiServer.onNetworkReady();
   }
+
   alarmController.update();
 
   watchdog.refresh();
@@ -148,4 +159,6 @@ void loop()
     watchdog.refresh();
     healthChecker.update();
   }
+
+  statusDisplay.update(healthChecker.failingServiceCount() > 0);
 }

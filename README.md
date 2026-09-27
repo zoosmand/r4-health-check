@@ -33,6 +33,17 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   another service starts failing, or the Wi-Fi outage alarm starts. It is also
   cleared when all faults disappear.
 
+### LED matrix
+
+- While at least one service is failing, the built-in 12 x 8 LED matrix
+  shows a steady caution sign: a triangle with an exclamation mark. The
+  matrix is off otherwise.
+- The sign follows the same rule as the service alarm (`FAILURE_THRESHOLD`
+  consecutive failures). It stays on when the buzzer is silenced, so a
+  silenced fault remains visible.
+- The matrix is refreshed from its own timer interrupt, so the sign stays lit
+  during blocking health checks.
+
 ### Wi-Fi
 
 - The network counts as connected only when the board has joined the access
@@ -72,6 +83,7 @@ All sources are in `src/UNO_R4_Health_Checker/`:
 - `NetworkManager.*`: Wi-Fi connection, reconnection, and outage tracking.
 - `HealthChecker.*`: scheduler and HTTPS `HEAD` checks.
 - `AlarmController.*`: timer-driven buzzer patterns.
+- `StatusDisplay.*`: caution sign on the built-in LED matrix.
 - `Watchdog.*`: hardware watchdog with main-loop supervision.
 - `ApiServer.*`: JSON HTTP API.
 - `HttpLineReader.*`: bounded, watchdog-aware HTTP line reader.

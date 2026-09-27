@@ -6,7 +6,7 @@ the repository and must not be modified.
 
 | Dependency | Provides | Installation |
 |---|---|---|
-| `arduino:renesas_uno` board package | Arduino core, FSP/CMSIS headers, `FspTimer`, the `WDT` library, and the `WiFiS3` library | `arduino-cli core install arduino:renesas_uno` or Arduino IDE *Boards Manager → Arduino UNO R4 Boards* |
+| `arduino:renesas_uno` board package | Arduino core, FSP/CMSIS headers, `FspTimer`, and the `WDT`, `WiFiS3`, and `Arduino_LED_Matrix` libraries | `arduino-cli core install arduino:renesas_uno` or Arduino IDE *Boards Manager → Arduino UNO R4 Boards* |
 | UNO R4 WiFi module firmware | TLS, DNS, and Wi-Fi handled by the ESP32-S3 coprocessor | Arduino IDE *Tools → Firmware Updater* |
 | `arduino-cli` | Command-line build used by `tools/build.sh` | <https://arduino.github.io/arduino-cli/> |
 
