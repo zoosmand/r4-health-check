@@ -147,8 +147,8 @@ const ServiceConfig SERVICE_CONFIGS[] = {
     true
   },
   {
-    "pgw-ac",
-    "White-labeled Acquiring",
+    "pgw",
+    "Intraclear New Acquiring",
     "pgw.intraclear.com",
     "/api/v1/health",
     443,
