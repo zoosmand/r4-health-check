@@ -24,6 +24,7 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
 |---|---|
 | At least one service failing | two short beeps every 6 s |
 | Wi-Fi down for `WIFI_OUTAGE_ALARM_MS` (60 s) | one long beep every 10 s |
+| Wi-Fi down for `WIFI_OUTAGE_RESTART_MS` (5 min) | board restarts (see [Wi-Fi](#wi-fi)) |
 | Wi-Fi module missing (fatal) | fast beeping, then reset after 60 s |
 | Buzzer test | continuous for 3 s |
 
@@ -36,13 +37,19 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
 ### LED matrix
 
 - While at least one service is failing, the built-in 12 x 8 LED matrix
-  shows a steady caution sign: a triangle with an exclamation mark. The
-  matrix is off otherwise.
+  shows a steady caution sign: a triangle with an exclamation mark.
+- The top-left LED is the heartbeat. While the network is ready, it beats
+  like a heart: a double "lub-dub" pulse every `HEARTBEAT_PERIOD_MS`
+  (1 s, 60 bpm). It is dark while the network is not ready. The sign does not
+  use this LED, so both can be shown at once.
+- The heartbeat is driven from the main loop on purpose. It pauses while a
+  health check or an API request blocks the loop (up to a few seconds), and a
+  heartbeat that stays steady or dark for longer means the firmware is stuck.
 - The sign follows the same rule as the service alarm (`FAILURE_THRESHOLD`
   consecutive failures). It stays on when the buzzer is silenced, so a
   silenced fault remains visible.
-- The matrix is refreshed from its own timer interrupt, so the sign stays lit
-  during blocking health checks.
+- The matrix is refreshed from its own timer interrupt, so the sign and the
+  current heartbeat LED state stay visible during blocking health checks.
 
 ### Wi-Fi
 
@@ -54,6 +61,11 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   after every reconnection. `GET /api/status` reports it as `ip_address`.
 - If no address arrives within `WIFI_ADDRESS_TIMEOUT_MS` (20 s) after
   joining, the board reconnects.
+- If the network has not been ready for `WIFI_OUTAGE_RESTART_MS` (5 min),
+  counted from boot as well, the board stops refreshing the watchdog and the
+  hardware watchdog restarts it within about 5.6 s. The serial log prints
+  `Network not ready for <n> s; restarting through the watchdog.` If the
+  access point stays down, this repeats every 5 min.
 
 ### Watchdog
 
@@ -69,7 +81,9 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   system resets it within about 5.6 s.
 - `GET /api/status` reports `watchdog_timeout_ms`,
   `loop_watchdog_timeout_ms`, and `last_reset_by_watchdog`. After a watchdog
-  reset the serial log prints `WARNING: restarted by the watchdog.`
+  reset the serial log prints `WARNING: restarted by the watchdog.` A
+  restart after a Wi-Fi outage is also a watchdog reset and is reported the
+  same way.
 - Service state is not kept across a reset. After a restart, every service is
   checked again from scratch.
 
@@ -83,7 +97,11 @@ All sources are in `src/UNO_R4_Health_Checker/`:
 - `NetworkManager.*`: Wi-Fi connection, reconnection, and outage tracking.
 - `HealthChecker.*`: scheduler and HTTPS `HEAD` checks.
 - `AlarmController.*`: timer-driven buzzer patterns.
-- `StatusDisplay.*`: caution sign on the built-in LED matrix.
+- `StatusDisplay.*`: caution sign and heartbeat LED on the built-in LED
+  matrix.
+- `Heartbeat.*`: heartbeat LED and restart after a long Wi-Fi outage.
+- `HeartbeatPattern.*`: Arduino-independent heartbeat timing (unit tested on
+  the host).
 - `Watchdog.*`: hardware watchdog with main-loop supervision.
 - `ApiServer.*`: JSON HTTP API.
 - `HttpLineReader.*`: bounded, watchdog-aware HTTP line reader.
@@ -183,7 +201,7 @@ variables.
 ## Tests
 
 ```sh
-test/host/run.sh     # host-side unit tests for TextParsing
+test/host/run.sh     # host-side unit tests for TextParsing and HeartbeatPattern
 tools/build.sh       # firmware compile check
 ```
 

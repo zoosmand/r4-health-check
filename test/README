@@ -4,7 +4,8 @@
 
 `test/host/` contains unit tests for the Arduino-independent helpers in
 `src/UNO_R4_Health_Checker/TextParsing.cpp`: HTTP status and request-line parsing, header matching,
-token comparison, version comparison, and JSON escaping.
+token comparison, version comparison, and JSON escaping. It also covers the
+heartbeat LED timing in `src/UNO_R4_Health_Checker/HeartbeatPattern.cpp`.
 
     test/host/run.sh
 
@@ -46,5 +47,12 @@ Run these by hand after changes that affect hardware behavior:
    `loop()`. The board resets within about 36 s and logs
    `WARNING: restarted by the watchdog.` `GET /api/status` then reports
    `"last_reset_by_watchdog":true`.
+7. Heartbeat: while Wi-Fi is connected, the top-left LED of the matrix beats
+   with a double pulse once per second, also while the caution sign is
+   shown. It goes dark when Wi-Fi is lost and resumes after reconnecting.
+8. Wi-Fi outage restart: switch off the access point. After 5 min the log
+   prints `Network not ready for 300 s; restarting through the watchdog.`,
+   the board resets within about 6 s, and logs
+   `WARNING: restarted by the watchdog.` after boot.
 
 &copy; 2017-2026, Dmitry Slobodchikov

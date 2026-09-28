@@ -3,6 +3,7 @@
 #include "NetworkManager.h"
 #include "HealthChecker.h"
 #include "StatusDisplay.h"
+#include "Heartbeat.h"
 #include "ApiServer.h"
 #include "Watchdog.h"
 #include "arduino_secrets.h"
@@ -26,6 +27,14 @@ NetworkManager networkManager(
   WIFI_CONNECT_TIMEOUT_MS,
   WIFI_ADDRESS_TIMEOUT_MS,
   WIFI_OUTAGE_ALARM_MS
+);
+
+Heartbeat heartbeat(
+  networkManager,
+  statusDisplay,
+  watchdog,
+  HEARTBEAT_PERIOD_MS,
+  WIFI_OUTAGE_RESTART_MS
 );
 
 HealthChecker healthChecker(
@@ -161,4 +170,5 @@ void loop()
   }
 
   statusDisplay.update(healthChecker.failingServiceCount() > 0);
+  heartbeat.update();
 }

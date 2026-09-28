@@ -20,6 +20,9 @@
 
   If no timer is available, refresh() refreshes the WDT directly, and the
   effective loop timeout is the hardware period.
+
+  requestReset() stops all refreshing, so a deliberate restart is also
+  performed by the WDT and is reported by consumeWatchdogResetFlag().
 */
 class Watchdog
 {
@@ -42,6 +45,16 @@ public:
     *        and before begin(). Call from thread context only.
     */
   void refresh();
+
+  /**
+    * @brief Stop refreshing the WDT so that it resets the MCU within one
+    *        hardware period (~5.6 s). Irreversible; later refresh() calls are
+    *        ignored. When the WDT is not running, resets the MCU immediately
+    *        with NVIC_SystemReset(). Call from thread context only.
+    */
+  void requestReset();
+
+  bool isResetRequested() const;
 
   bool isRunning() const;
 
@@ -84,6 +97,9 @@ private:
   // Reset to 0 by refresh() with a single store; incremented by the
   // interrupt, which cannot be preempted by the main loop.
   volatile uint32_t _ticksSinceRefresh;
+
+  // Set once by requestReset(); read by the interrupt.
+  volatile bool _resetRequested;
 };
 
 #endif
