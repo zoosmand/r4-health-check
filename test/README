@@ -49,10 +49,16 @@ Run these by hand after changes that affect hardware behavior:
    `"last_reset_by_watchdog":true`.
 7. Heartbeat: while Wi-Fi is connected, the top-left LED of the matrix beats
    with a double pulse once per second, also while the caution sign is
-   shown. It goes dark when Wi-Fi is lost and resumes after reconnecting.
+   shown. It is steady on while a health check runs (the serial log prints
+   `Checking [...]`) and beats again when the check ends. It goes dark when
+   Wi-Fi is lost and resumes after reconnecting.
 8. Wi-Fi outage restart: switch off the access point. After 5 min the log
    prints `Network not ready for 300 s; restarting through the watchdog.`,
    the board resets within about 6 s, and logs
    `WARNING: restarted by the watchdog.` after boot.
+9. Idle sleep: the boot log shows no `idle sleep disabled` warning. The
+   serial log, buzzer patterns, API, and LED matrix behave as before. The
+   board's supply current is slightly lower than on a build without the
+   `powerManager.idle()` call.
 
 &copy; 2017-2026, Dmitry Slobodchikov

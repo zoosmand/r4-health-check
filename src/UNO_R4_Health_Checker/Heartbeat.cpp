@@ -13,7 +13,8 @@ Heartbeat::Heartbeat(
     _watchdog(watchdog),
     _periodMs(periodMs),
     _outageRestartMs(outageRestartMs),
-    _restartRequested(false)
+    _restartRequested(false),
+    _busy(false)
 {
 }
 
@@ -44,7 +45,17 @@ void Heartbeat::update()
     return;
   }
 
-  _statusDisplay.setHeartbeat(isHeartbeatLedOn(millis(), _periodMs));
+  _statusDisplay.setHeartbeat(_busy || isHeartbeatLedOn(millis(), _periodMs));
+}
+
+void Heartbeat::setBusy(bool busy)
+{
+  _busy = busy;
+
+  if (busy && !_restartRequested)
+  {
+    _statusDisplay.setHeartbeat(true);
+  }
 }
 
 bool Heartbeat::isRestartRequested() const

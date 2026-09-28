@@ -9,10 +9,13 @@
 /*
   Heartbeat service.
 
-  While the network is ready, one LED of the matrix beats like a heart. The
-  beat is driven from the main loop on purpose: it freezes while the loop is
-  blocked, so a steady or dark LED means the firmware is busy or stuck. While
-  the network is not ready, the LED stays dark.
+  While the network is ready, one LED of the matrix beats like a heart. While
+  a health check runs, the LED is steady on (see setBusy()). While the network
+  is not ready, the LED stays dark.
+
+  The beat is driven from the main loop on purpose: it freezes while the loop
+  is blocked, so an LED that stays dark while the network is up, or stays on
+  much longer than a check can take, means the firmware is stuck.
 
   When the network has not been ready for the restart timeout (counted from
   boot as well), the service stops refreshing the watchdog, and the hardware
@@ -49,6 +52,14 @@ public:
   void update();
 
   /**
+    * @brief Mark the start or end of a health check. While busy, the LED is
+    *        steady on; the beat resumes on the next update() after the end.
+    *        Non-blocking.
+    * @param busy (bool) True when a check starts, false when it ends.
+    */
+  void setBusy(bool busy);
+
+  /**
     * @brief Report whether a watchdog restart has been requested.
     * @retval (bool) True once the outage timeout has been reached.
     */
@@ -63,6 +74,7 @@ private:
   unsigned long _outageRestartMs;
 
   bool _restartRequested;
+  bool _busy;
 };
 
 #endif

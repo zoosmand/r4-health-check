@@ -42,9 +42,12 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   like a heart: a double "lub-dub" pulse every `HEARTBEAT_PERIOD_MS`
   (1 s, 60 bpm). It is dark while the network is not ready. The sign does not
   use this LED, so both can be shown at once.
-- The heartbeat is driven from the main loop on purpose. It pauses while a
-  health check or an API request blocks the loop (up to a few seconds), and a
-  heartbeat that stays steady or dark for longer means the firmware is stuck.
+- While a health check runs, the heartbeat LED is steady on. The beat
+  resumes when the check has finished.
+- The heartbeat is driven from the main loop on purpose. It pauses while an
+  API request or a reconnection blocks the loop (up to a few seconds). An LED
+  that stays dark while Wi-Fi is up, or stays on much longer than a check can
+  take (about 40 s), means the firmware is stuck.
 - The sign follows the same rule as the service alarm (`FAILURE_THRESHOLD`
   consecutive failures). It stays on when the buzzer is silenced, so a
   silenced fault remains visible.
@@ -86,6 +89,25 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   same way.
 - Service state is not kept across a reset. After a restart, every service is
   checked again from scratch.
+- The WDT library stops the hardware watchdog count while the CPU sleeps (see
+  [Power saving](#power-saving)). Main-loop supervision uses its own timer and
+  is unaffected. After a restart has been requested, the CPU no longer
+  sleeps, so the reset still happens within about 5.6 s.
+
+### Power saving
+
+- After each main loop pass, the RA4M1 waits `IDLE_SLEEP_MS` (20 ms) in
+  Sleep mode: the CPU clock stops, and every interrupt (the 1 ms `millis()`
+  tick, the buzzer and watchdog timers, the LED matrix, UART, and USB) wakes
+  it. The buzzer, matrix, serial log, and Wi-Fi link keep working.
+- Software Standby is not used, because it stops the clocks that
+  `millis()`, the LED matrix, and the Wi-Fi UART need. If it is found enabled
+  at boot, idle sleep is disabled and the log prints a warning.
+- API requests are accepted up to 20 ms later than before, and the heartbeat
+  timing has 20 ms resolution.
+- The savings are limited to the RA4M1. Most of the board's current is drawn
+  by the Wi-Fi coprocessor and the LED matrix, and the WiFiS3 library offers
+  no power-saving control for the coprocessor.
 
 ## Project files
 
@@ -100,6 +122,7 @@ All sources are in `src/UNO_R4_Health_Checker/`:
 - `StatusDisplay.*`: caution sign and heartbeat LED on the built-in LED
   matrix.
 - `Heartbeat.*`: heartbeat LED and restart after a long Wi-Fi outage.
+- `PowerManager.*`: RA4M1 Sleep mode between main loop passes.
 - `HeartbeatPattern.*`: Arduino-independent heartbeat timing (unit tested on
   the host).
 - `Watchdog.*`: hardware watchdog with main-loop supervision.

@@ -25,12 +25,14 @@ HealthChecker::HealthChecker(
   const ServiceConfig *configs,
   size_t serviceCount,
   AlarmController &alarmController,
+  Heartbeat &heartbeat,
   Watchdog &watchdog
 )
   : _configs(configs),
     _serviceCount(serviceCount),
     _states(nullptr),
     _alarmController(alarmController),
+    _heartbeat(heartbeat),
     _watchdog(watchdog),
     _roundRobinCursor(0),
     _nextCheckAllowedAtMs(0)
@@ -232,6 +234,7 @@ void HealthChecker::performCheck(size_t index)
 
   state.checkInProgress = true;
   state.lastCheckStartedAtMs = millis();
+  _heartbeat.setBusy(true);
   state.httpStatus = 0;
   state.lastError = "";
 
@@ -244,6 +247,7 @@ void HealthChecker::performCheck(size_t index)
 
   const bool healthy = runRequest(config, state);
 
+  _heartbeat.setBusy(false);
   state.lastCheckCompletedAtMs = millis();
   state.lastCheckDurationMs =
     state.lastCheckCompletedAtMs - state.lastCheckStartedAtMs;

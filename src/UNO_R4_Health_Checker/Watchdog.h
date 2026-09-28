@@ -23,6 +23,11 @@
 
   requestReset() stops all refreshing, so a deliberate restart is also
   performed by the WDT and is reported by consumeWatchdogResetFlag().
+
+  The WDT library stops the WDT count while the CPU is in Sleep mode. The
+  supervisor counts its own timer ticks, so loop supervision is unaffected,
+  but the hardware period only elapses while the CPU is awake (see
+  PowerManager.h).
 */
 class Watchdog
 {
@@ -48,8 +53,8 @@ public:
 
   /**
     * @brief Stop refreshing the WDT so that it resets the MCU within one
-    *        hardware period (~5.6 s). Irreversible; later refresh() calls are
-    *        ignored. When the WDT is not running, resets the MCU immediately
+    *        hardware period (~5.6 s) of CPU time awake. Irreversible; later
+    *        refresh() calls are ignored and PowerManager stops sleeping. When the WDT is not running, resets the MCU immediately
     *        with NVIC_SystemReset(). Call from thread context only.
     */
   void requestReset();

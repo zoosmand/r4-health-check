@@ -4,6 +4,7 @@
 #include "HealthChecker.h"
 #include "StatusDisplay.h"
 #include "Heartbeat.h"
+#include "PowerManager.h"
 #include "ApiServer.h"
 #include "Watchdog.h"
 #include "arduino_secrets.h"
@@ -15,6 +16,8 @@
 #endif
 
 Watchdog watchdog;
+
+PowerManager powerManager(watchdog);
 
 AlarmController alarmController(BUZZER_PIN, BUZZER_ACTIVE_HIGH);
 
@@ -41,6 +44,7 @@ HealthChecker healthChecker(
   SERVICE_CONFIGS,
   SERVICE_COUNT,
   alarmController,
+  heartbeat,
   watchdog
 );
 
@@ -130,6 +134,11 @@ void setup()
     Serial.println(F("WARNING: no hardware timer; LED matrix disabled."));
   }
 
+  if (!powerManager.begin())
+  {
+    Serial.println(F("WARNING: Software Standby is selected; idle sleep disabled."));
+  }
+
   healthChecker.begin();
 
   if (!networkManager.begin())
@@ -171,4 +180,7 @@ void loop()
 
   statusDisplay.update(healthChecker.failingServiceCount() > 0);
   heartbeat.update();
+
+  // Every job above is polled; sleep until the next pass.
+  powerManager.idle(IDLE_SLEEP_MS);
 }

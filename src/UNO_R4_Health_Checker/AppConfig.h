@@ -75,6 +75,16 @@ constexpr unsigned long WIFI_OUTAGE_RESTART_MS = 5UL * 60UL * 1000UL;
 constexpr unsigned long HEARTBEAT_PERIOD_MS = 1000UL;
 
 // -----------------------------------------------------------------------------
+// Power
+// -----------------------------------------------------------------------------
+
+// Time the CPU sleeps after each main loop pass (see PowerManager.h). It is
+// also the longest added delay before an API request is accepted and the
+// timing resolution of the heartbeat LED, so keep it well below the 100 ms
+// heartbeat pulses.
+constexpr unsigned long IDLE_SLEEP_MS = 20UL;
+
+// -----------------------------------------------------------------------------
 // Buzzer
 // -----------------------------------------------------------------------------
 
@@ -191,6 +201,10 @@ static_assert(
   WIFI_OUTAGE_RESTART_MS >
     WIFI_CONNECT_TIMEOUT_MS + WIFI_ADDRESS_TIMEOUT_MS + WIFI_RECONNECT_INTERVAL_MS,
   "The outage restart must allow at least one full connection attempt"
+);
+static_assert(
+  IDLE_SLEEP_MS <= 25UL,
+  "Idle sleep would visibly distort the 100 ms heartbeat pulses"
 );
 static_assert(
   HEARTBEAT_PERIOD_MS >= HEARTBEAT_MINIMUM_PERIOD_MS,
