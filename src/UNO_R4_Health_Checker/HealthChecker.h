@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include "ServiceModels.h"
 #include "AlarmController.h"
+#include "Heartbeat.h"
 #include "Watchdog.h"
 
 /*
@@ -12,7 +13,8 @@
   update() starts at most one check per call and blocks until that check has
   finished (DNS, TLS connect, request, status line, headers). Each Wi-Fi
   module call is bounded by the WiFiS3 modem timeout (10 s); the watchdog is
-  refreshed between those calls and inside the response wait loops.
+  refreshed between those calls and inside the response wait loops. The
+  heartbeat LED is steady on while a check runs.
 */
 class HealthChecker
 {
@@ -22,12 +24,14 @@ public:
     *        outlives this object.
     * @param serviceCount (size_t) Number of entries in configs.
     * @param alarmController (AlarmController&) Alarm updated after checks.
+    * @param heartbeat (Heartbeat&) Marked busy while a check runs.
     * @param watchdog (Watchdog&) Watchdog refreshed during checks.
     */
   HealthChecker(
     const ServiceConfig *configs,
     size_t serviceCount,
     AlarmController &alarmController,
+    Heartbeat &heartbeat,
     Watchdog &watchdog
   );
 
@@ -105,6 +109,7 @@ private:
 
   ServiceState *_states;
   AlarmController &_alarmController;
+  Heartbeat &_heartbeat;
   Watchdog &_watchdog;
 
   size_t _roundRobinCursor;

@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "ServiceModels.h"
+#include "HeartbeatPattern.h"
 
 // -----------------------------------------------------------------------------
 // General
@@ -59,6 +60,29 @@ constexpr unsigned long WIFI_ADDRESS_TIMEOUT_MS = 20000UL;
 
 // Raise the network alarm after the network has not been ready this long.
 constexpr unsigned long WIFI_OUTAGE_ALARM_MS = 60UL * 1000UL;
+
+// Restart the board through the watchdog after the network has not been ready
+// this long, counted from boot as well. Keep it well above
+// WIFI_OUTAGE_ALARM_MS, so the alarm sounds first, and long enough that an
+// access point that is down does not cause rapid restart cycles.
+constexpr unsigned long WIFI_OUTAGE_RESTART_MS = 5UL * 60UL * 1000UL;
+
+// -----------------------------------------------------------------------------
+// Heartbeat
+// -----------------------------------------------------------------------------
+
+// One beat of the heartbeat LED: 1000 ms is 60 beats per minute.
+constexpr unsigned long HEARTBEAT_PERIOD_MS = 1000UL;
+
+// -----------------------------------------------------------------------------
+// Power
+// -----------------------------------------------------------------------------
+
+// Time the CPU sleeps after each main loop pass (see PowerManager.h). It is
+// also the longest added delay before an API request is accepted and the
+// timing resolution of the heartbeat LED, so keep it well below the 100 ms
+// heartbeat pulses.
+constexpr unsigned long IDLE_SLEEP_MS = 20UL;
 
 // -----------------------------------------------------------------------------
 // Buzzer
@@ -168,6 +192,23 @@ static_assert(
 static_assert(
   static_cast<uint32_t>(TLS_CONNECT_TIMEOUT_MS) + 10000UL < LOOP_WATCHDOG_TIMEOUT_MS,
   "A TLS connect would outlast the loop watchdog"
+);
+static_assert(
+  WIFI_OUTAGE_RESTART_MS > WIFI_OUTAGE_ALARM_MS,
+  "The outage alarm must sound before the outage restart"
+);
+static_assert(
+  WIFI_OUTAGE_RESTART_MS >
+    WIFI_CONNECT_TIMEOUT_MS + WIFI_ADDRESS_TIMEOUT_MS + WIFI_RECONNECT_INTERVAL_MS,
+  "The outage restart must allow at least one full connection attempt"
+);
+static_assert(
+  IDLE_SLEEP_MS <= 25UL,
+  "Idle sleep would visibly distort the 100 ms heartbeat pulses"
+);
+static_assert(
+  HEARTBEAT_PERIOD_MS >= HEARTBEAT_MINIMUM_PERIOD_MS,
+  "The heartbeat period is too short for the pulse pattern"
 );
 
 #endif

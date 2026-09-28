@@ -14,7 +14,8 @@ Watchdog::Watchdog()
     _hardwareTimeoutMs(0),
     _loopTimeoutMs(0),
     _loopTimeoutTicks(0),
-    _ticksSinceRefresh(0)
+    _ticksSinceRefresh(0),
+    _resetRequested(false)
 {
 }
 
@@ -61,7 +62,7 @@ bool Watchdog::begin(uint32_t hardwareTimeoutMs, uint32_t loopTimeoutMs)
 
 void Watchdog::refresh()
 {
-  if (!_running)
+  if (!_running || _resetRequested)
   {
     return;
   }
@@ -74,6 +75,21 @@ void Watchdog::refresh()
   {
     WDT.refresh();
   }
+}
+
+void Watchdog::requestReset()
+{
+  _resetRequested = true;
+
+  if (!_running)
+  {
+    NVIC_SystemReset();
+  }
+}
+
+bool Watchdog::isResetRequested() const
+{
+  return _resetRequested;
 }
 
 bool Watchdog::isRunning() const
@@ -117,6 +133,11 @@ void Watchdog::timerCallback(timer_callback_args_t *args)
 
   Watchdog *self =
     static_cast<Watchdog *>(const_cast<void *>(args->p_context));
+
+  if (self->_resetRequested)
+  {
+    return;
+  }
 
   const uint32_t ticks = self->_ticksSinceRefresh;
 

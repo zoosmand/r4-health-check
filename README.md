@@ -27,6 +27,7 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
 | Wi-Fi module missing (fatal) | fast beeping, then reset after 60 s |
 | Buzzer test | continuous for 3 s |
 
+- The buzzer is connected to pin D8 (see [Hardware](#hardware)).
 - The pattern is generated from a hardware-timer interrupt. It keeps running
   while the main loop is blocked in a DNS lookup or TLS handshake.
 - A silenced alarm is automatically re-enabled when a **new** fault appears:
@@ -35,14 +36,27 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
 
 ### LED matrix
 
-- While at least one service is failing, the built-in 12 x 8 LED matrix
-  shows a steady caution sign: a triangle with an exclamation mark. The
-  matrix is off otherwise.
-- The sign follows the same rule as the service alarm (`FAILURE_THRESHOLD`
-  consecutive failures). It stays on when the buzzer is silenced, so a
-  silenced fault remains visible.
-- The matrix is refreshed from its own timer interrupt, so the sign stays lit
-  during blocking health checks.
+The built-in 12 x 8 LED matrix shows two independent indicators. The matrix
+is refreshed from its own timer interrupt, so both stay visible while the
+main loop is blocked.
+
+**Caution sign.** While at least one service is failing, the matrix shows a
+steady triangle with an exclamation mark. It follows the same rule as the
+service alarm (`FAILURE_THRESHOLD` consecutive failures) and stays on when
+the buzzer is silenced, so a silenced fault remains visible.
+
+**Heartbeat.** The top-left LED, which the caution sign does not use:
+
+| State | LED |
+|---|---|
+| Wi-Fi connected, idle | double "lub-dub" pulse every `HEARTBEAT_PERIOD_MS` (1 s, 60 bpm) |
+| Health check running | steady on |
+| Wi-Fi not connected | dark |
+
+The heartbeat is driven from the main loop on purpose, so it also shows that
+the firmware is alive. It pauses while an API request blocks the loop (up to
+a few seconds). An LED that stays dark while Wi-Fi is up, or stays on much
+longer than a check can take (about 40 s), means the firmware is stuck.
 
 ### Wi-Fi
 
@@ -54,6 +68,11 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   after every reconnection. `GET /api/status` reports it as `ip_address`.
 - If no address arrives within `WIFI_ADDRESS_TIMEOUT_MS` (20 s) after
   joining, the board reconnects.
+- If the network has not been connected for `WIFI_OUTAGE_RESTART_MS`
+  (5 min), counted from boot as well, the board restarts through the
+  watchdog. The serial log prints
+  `Network not ready for <n> s; restarting through the watchdog.` If the
+  access point stays down, this repeats every 5 min.
 
 ### Watchdog
 
@@ -67,11 +86,48 @@ buzzer when they fail, and exposes its state through a small JSON HTTP API.
   check. A slow or hanging server therefore never resets the board. A stuck
   main loop or Wi-Fi driver resets it within about 36 s. A stuck interrupt
   system resets it within about 5.6 s.
+- A deliberate restart (after a long Wi-Fi outage) stops all refreshing, so
+  the hardware watchdog resets the board within about 5.6 s.
+- The WDT library pauses the hardware watchdog count while the CPU sleeps
+  (see [Power saving](#power-saving)). Main-loop supervision uses its own
+  timer and is unaffected, and the CPU stops sleeping once a restart has been
+  requested.
 - `GET /api/status` reports `watchdog_timeout_ms`,
-  `loop_watchdog_timeout_ms`, and `last_reset_by_watchdog`. After a watchdog
-  reset the serial log prints `WARNING: restarted by the watchdog.`
+  `loop_watchdog_timeout_ms`, and `last_reset_by_watchdog`. After any
+  watchdog reset, including a Wi-Fi outage restart, the serial log prints
+  `WARNING: restarted by the watchdog.`
 - Service state is not kept across a reset. After a restart, every service is
   checked again from scratch.
+
+### Power saving
+
+- After each main loop pass, the RA4M1 waits `IDLE_SLEEP_MS` (20 ms) in
+  Sleep mode. The CPU clock stops, and every interrupt wakes it: the 1 ms
+  `millis()` tick, the buzzer and watchdog timers, the LED matrix, UART, and
+  USB. The buzzer, matrix, serial log, and Wi-Fi link keep working.
+- As a result, an API request may wait up to 20 ms before it is accepted, and
+  the heartbeat timing has 20 ms resolution.
+- Software Standby is not used, because it stops the clocks that
+  `millis()`, the LED matrix, and the Wi-Fi UART need. If it is found enabled
+  at boot, idle sleep is disabled and the log prints a warning.
+- The savings are limited to the RA4M1. Most of the board's current is drawn
+  by the Wi-Fi coprocessor and the LED matrix, and the WiFiS3 library offers
+  no power-saving control for the coprocessor.
+
+## Runtime model
+
+The firmware has no RTOS. It runs one cooperative main loop and a few timer
+interrupts:
+
+- **Main loop:** Wi-Fi connection, API server, health checks, LED matrix
+  content, and heartbeat, one step each per pass, followed by idle sleep.
+  Wi-Fi module calls block, so a health check holds the loop for its whole
+  duration.
+- **Interrupts:** the buzzer pattern (100 Hz), the watchdog supervisor
+  (10 Hz), and the LED matrix refresh. They keep running while the loop is
+  blocked.
+- Data shared between the loop and an interrupt is limited to single-word
+  `volatile` variables, so every access is atomic and no locking is needed.
 
 ## Project files
 
@@ -82,15 +138,33 @@ All sources are in `src/UNO_R4_Health_Checker/`:
 - `ServiceModels.h`: service configuration and runtime-state structures.
 - `NetworkManager.*`: Wi-Fi connection, reconnection, and outage tracking.
 - `HealthChecker.*`: scheduler and HTTPS `HEAD` checks.
-- `AlarmController.*`: timer-driven buzzer patterns.
-- `StatusDisplay.*`: caution sign on the built-in LED matrix.
-- `Watchdog.*`: hardware watchdog with main-loop supervision.
-- `ApiServer.*`: JSON HTTP API.
 - `HttpLineReader.*`: bounded, watchdog-aware HTTP line reader.
-- `TextParsing.*`: Arduino-independent parsing helpers (unit tested on the
-  host).
+- `ApiServer.*`: JSON HTTP API.
+- `AlarmController.*`: timer-driven buzzer patterns.
+- `StatusDisplay.*`: caution sign and heartbeat LED on the LED matrix.
+- `Heartbeat.*`: heartbeat LED and restart after a long Wi-Fi outage.
+- `Watchdog.*`: hardware watchdog with main-loop supervision.
+- `PowerManager.*`: RA4M1 Sleep mode between main loop passes.
+- `TextParsing.*`, `HeartbeatPattern.*`: Arduino-independent helpers, unit
+  tested on the host.
 - `arduino_secrets.h.example`: template for the Wi-Fi credentials and the
   optional API token.
+
+## Hardware
+
+- Arduino UNO R4 WiFi. The LED matrix and the Wi-Fi module are built in.
+- An **active** buzzer, one with a built-in oscillator, on digital pin
+  **D8**. The firmware only switches the pin on and off and does not
+  generate a tone, so a passive buzzer or bare piezo disc would only click.
+
+| Setting in `AppConfig.h` | Default | Meaning |
+|---|---|---|
+| `BUZZER_PIN` | `8` | Digital pin that drives the buzzer |
+| `BUZZER_ACTIVE_HIGH` | `true` | `true`: the pin is HIGH while sounding. Set `false` for a low-level-trigger module or a PNP stage. |
+
+The RA4M1 pins are rated for about 8 mA. If the buzzer draws more, drive it
+through a transistor (for example an NPN with a base resistor, keeping
+`BUZZER_ACTIVE_HIGH = true`) or use a ready-made buzzer module.
 
 ## Setup
 
@@ -183,7 +257,7 @@ variables.
 ## Tests
 
 ```sh
-test/host/run.sh     # host-side unit tests for TextParsing
+test/host/run.sh     # host-side unit tests for TextParsing and HeartbeatPattern
 tools/build.sh       # firmware compile check
 ```
 
