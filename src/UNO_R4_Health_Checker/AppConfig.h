@@ -117,9 +117,19 @@ constexpr unsigned long FAILURE_RETRY_INTERVAL_MS = 15UL * 1000UL;
 
 const ServiceConfig SERVICE_CONFIGS[] = {
   {
-    "secure",
+    "acquiring",
     "Intraclear Old Acquiring",
     "secure.intraclear.com",
+    "/api/v1/health",
+    443,
+    DEFAULT_CHECK_INTERVAL_MS,
+    DEFAULT_HTTP_TIMEOUT_MS,
+    true
+  },
+  {
+    "website",
+    "Intraclear Public Website",
+    "intraclear.com",
     "/",
     443,
     DEFAULT_CHECK_INTERVAL_MS,
@@ -127,19 +137,9 @@ const ServiceConfig SERVICE_CONFIGS[] = {
     true
   },
   {
-    "public-site",
-    "Public Website",
-    "www.neuro-ural.ru",
-    "/",
-    443,
-    DEFAULT_CHECK_INTERVAL_MS,
-    DEFAULT_HTTP_TIMEOUT_MS,
-    true
-  },
-  {
-    "pgw-ic",
-    "Intraclear New Acquiring",
-    "pgw.intraclear.com",
+    "ebank",
+    "Intraclear E-Bank",
+    "ebank.intraclear.com",
     "/",
     443,
     DEFAULT_CHECK_INTERVAL_MS,
@@ -149,12 +149,12 @@ const ServiceConfig SERVICE_CONFIGS[] = {
   {
     "pgw-ac",
     "White-labeled Acquiring",
-    "pgw.anycrypto.io",
-    "/",
+    "pgw.intraclear.com",
+    "/api/v1/health",
     443,
     DEFAULT_CHECK_INTERVAL_MS,
     DEFAULT_HTTP_TIMEOUT_MS,
-    true
+    false
   }
 };
 
