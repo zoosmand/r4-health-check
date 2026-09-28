@@ -1,0 +1,64 @@
+# TESTS
+
+## Host-side unit tests
+
+`test/host/` contains unit tests for the Arduino-independent helpers in
+`src/UNO_R4_Health_Checker/TextParsing.cpp`: HTTP status and request-line parsing, header matching,
+token comparison, version comparison, and JSON escaping. It also covers the
+heartbeat LED timing in `src/UNO_R4_Health_Checker/HeartbeatPattern.cpp`.
+
+    test/host/run.sh
+
+The script builds the tests with the system C++ compiler, using
+AddressSanitizer and UndefinedBehaviorSanitizer, and exits non-zero on any
+failure.
+
+## Firmware build check
+
+    tools/build.sh
+
+Compiles the firmware with arduino-cli and all warnings enabled.
+
+## API tests (Postman)
+
+`UNO_R4_Multi_Service_Health_Checker.postman_collection.json` covers every API
+endpoint. Set the collection variables:
+
+- `baseUrl`: device address, for example `http://192.168.1.50`
+- `serviceId`: an id from `SERVICE_CONFIGS`
+- `apiToken`: the value of `SECRET_API_TOKEN`, or empty when it is not set
+
+## Target-device checks
+
+Run these by hand after changes that affect hardware behavior:
+
+1. Buzzer test: `POST /api/buzzer/test` sounds for 3 s.
+2. Service alarm: point one service at a host that answers with a non-200
+   status. After two checks (about 15 s apart) the service alarm pattern
+   sounds and `failing_service_count` is 1.
+3. Silence and re-arm: silence the alarm, then make a second service fail.
+   The buzzer sounds again.
+4. LED matrix: while a service is failing, the matrix shows the caution
+   triangle, including while the buzzer is silenced. It turns off after the
+   service recovers.
+5. Network alarm: switch off the access point. After 60 s the long-beep
+   pattern sounds. It stops after Wi-Fi reconnects.
+6. Watchdog: temporarily add an endless loop without a watchdog refresh to
+   `loop()`. The board resets within about 36 s and logs
+   `WARNING: restarted by the watchdog.` `GET /api/status` then reports
+   `"last_reset_by_watchdog":true`.
+7. Heartbeat: while Wi-Fi is connected, the top-left LED of the matrix beats
+   with a double pulse once per second, also while the caution sign is
+   shown. It is steady on while a health check runs (the serial log prints
+   `Checking [...]`) and beats again when the check ends. It goes dark when
+   Wi-Fi is lost and resumes after reconnecting.
+8. Wi-Fi outage restart: switch off the access point. After 5 min the log
+   prints `Network not ready for 300 s; restarting through the watchdog.`,
+   the board resets within about 6 s, and logs
+   `WARNING: restarted by the watchdog.` after boot.
+9. Idle sleep: the boot log shows no `idle sleep disabled` warning. The
+   serial log, buzzer patterns, API, and LED matrix behave as before. The
+   board's supply current is slightly lower than on a build without the
+   `powerManager.idle()` call.
+
+&copy; 2017-2026, Dmitry Slobodchikov
