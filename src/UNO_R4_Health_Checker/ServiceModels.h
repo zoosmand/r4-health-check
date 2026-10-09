@@ -47,6 +47,17 @@ struct ServiceConfig
   *        healthy one.
   * @param lastError (const char*) Static description of the last failure, or
   *        an empty string.
+  * @param certificateKnown (bool) certificateNotAfterUnixSeconds holds a
+  *        value read since boot. It is kept when a later read fails.
+  * @param certificateExpiring (bool) The certificate expires within
+  *        CERTIFICATE_WARNING_DAYS (or has expired); drives the melody.
+  * @param certificateCheckQueued (bool) A certificate read is due now.
+  * @param certificateNotAfterUnixSeconds (uint32_t) Expiry of the leaf
+  *        certificate, in Unix seconds.
+  * @param nextCertificateCheckAtMs (unsigned long) When the next scheduled
+  *        certificate read is due.
+  * @param certificateError (const char*) Static description of the last
+  *        failed certificate read, or an empty string.
   */
 struct ServiceState
 {
@@ -68,6 +79,15 @@ struct ServiceState
   unsigned long consecutiveFailures;
 
   const char *lastError;
+
+  bool certificateKnown;
+  bool certificateExpiring;
+  bool certificateCheckQueued;
+
+  uint32_t certificateNotAfterUnixSeconds;
+  unsigned long nextCertificateCheckAtMs;
+
+  const char *certificateError;
 };
 
 #endif
