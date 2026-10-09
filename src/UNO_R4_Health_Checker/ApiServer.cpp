@@ -2,12 +2,14 @@
 #include "AppConfig.h"
 #include "HttpLineReader.h"
 #include "TextParsing.h"
+#include "UtcTime.h"
 
 namespace
 {
 constexpr size_t METHOD_CAPACITY = 8;
 constexpr char SERVICES_PREFIX[] = "/api/services/";
 constexpr char CHECK_SUFFIX[] = "/check";
+constexpr size_t ISO_TIME_CAPACITY = 24;
 
 unsigned long remainingMs(unsigned long startedAt, unsigned long budgetMs)
 {
@@ -76,6 +78,7 @@ void ApiServer::printEndpoints() const
     "POST /api/check",
     "POST /api/services/{id}/check",
     "POST /api/buzzer/test",
+    "POST /api/buzzer/melody",
     "POST /api/buzzer/silence",
     "POST /api/buzzer/unsilence"
   };
@@ -281,6 +284,19 @@ void ApiServer::routeRequest(
     return;
   }
 
+  if (strcmp(path, "/api/buzzer/melody") == 0)
+  {
+    if (!isPost)
+    {
+      sendError(client, 405, "Method Not Allowed", "Use POST");
+      return;
+    }
+
+    _alarmController.startMelodyTest();
+    sendJson(client, 200, "OK", "{\"result\":\"Melody test started\"}");
+    return;
+  }
+
   if (strcmp(path, "/api/buzzer/silence") == 0)
   {
     if (!isPost)
@@ -379,7 +395,7 @@ void ApiServer::routeRequest(
 void ApiServer::sendOverview(WiFiClient &client)
 {
   String json;
-  json.reserve(640);
+  json.reserve(800);
 
   json += "{";
   json += "\"device\":\"UNO R4 WiFi Multi-Service Health Checker\",";
@@ -424,12 +440,36 @@ void ApiServer::sendOverview(WiFiClient &client)
   json += boolJson(_alarmController.isNetworkAlarmActive());
   json += ",";
 
+  json += "\"certificate_warning_active\":";
+  json += boolJson(_alarmController.isCertificateWarningActive());
+  json += ",";
+
+  json += "\"expiring_certificate_count\":";
+  json += String(_healthChecker.expiringCertificateCount());
+  json += ",";
+
+  // Empty until a health-check response has carried an HTTP Date header.
+  char utcTime[ISO_TIME_CAPACITY] = "";
+
+  if (_healthChecker.clock().isSet())
+  {
+    formatIsoUtc(_healthChecker.clock().nowUnixSeconds(), utcTime, sizeof(utcTime));
+  }
+
+  json += "\"utc_time\":\"";
+  json += utcTime;
+  json += "\",";
+
   json += "\"buzzer_silenced\":";
   json += boolJson(_alarmController.isSilenced());
   json += ",";
 
   json += "\"buzzer_test_active\":";
   json += boolJson(_alarmController.isTestActive());
+  json += ",";
+
+  json += "\"melody_test_active\":";
+  json += boolJson(_alarmController.isMelodyTestActive());
   json += ",";
 
   json += "\"watchdog_timeout_ms\":";
@@ -455,7 +495,7 @@ void ApiServer::sendOverview(WiFiClient &client)
 void ApiServer::sendServices(WiFiClient &client)
 {
   String json;
-  json.reserve(16 + _healthChecker.serviceCount() * 560);
+  json.reserve(16 + _healthChecker.serviceCount() * 760);
 
   json += "{\"services\":[";
 
@@ -485,7 +525,7 @@ String ApiServer::buildServiceJson(size_t index) const
   const ServiceState &state = _healthChecker.stateAt(index);
 
   String json;
-  json.reserve(560);
+  json.reserve(760);
 
   json += "{";
 
@@ -568,6 +608,46 @@ String ApiServer::buildServiceJson(size_t index) const
 
   json += "\"consecutive_failures\":";
   json += String(state.consecutiveFailures);
+  json += ",";
+
+  char notAfter[ISO_TIME_CAPACITY] = "";
+
+  if (state.certificateKnown)
+  {
+    formatIsoUtc(state.certificateNotAfterUnixSeconds, notAfter, sizeof(notAfter));
+  }
+
+  json += "\"certificate_not_after\":\"";
+  json += notAfter;
+  json += "\",";
+
+  // null while the expiry or the current time is unknown.
+  json += "\"certificate_days_left\":";
+
+  if (state.certificateKnown && _healthChecker.clock().isSet())
+  {
+    json += String(daysUntil(
+      state.certificateNotAfterUnixSeconds,
+      _healthChecker.clock().nowUnixSeconds()
+    ));
+  }
+  else
+  {
+    json += "null";
+  }
+
+  json += ",";
+
+  json += "\"certificate_expiring\":";
+  json += boolJson(state.certificateExpiring);
+  json += ",";
+
+  json += "\"certificate_error\":\"";
+  json += escapeJson(state.certificateError);
+  json += "\",";
+
+  json += "\"next_certificate_check_at_ms\":";
+  json += String(state.nextCertificateCheckAtMs);
 
   json += "}";
 

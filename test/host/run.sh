@@ -25,3 +25,28 @@ mkdir -p "$OUT"
   -o "$OUT/heartbeat_pattern_test"
 
 "$OUT/heartbeat_pattern_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/utc_time_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/UtcTime.cpp" \
+  -o "$OUT/utc_time_test"
+
+"$OUT/utc_time_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/tls_certificate_parser_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/TlsCertificateParser.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/UtcTime.cpp" \
+  -o "$OUT/tls_certificate_parser_test"
+
+"$OUT/tls_certificate_parser_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/buzzer_melody_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/BuzzerMelody.cpp" \
+  -o "$OUT/buzzer_melody_test"
+
+"$OUT/buzzer_melody_test"

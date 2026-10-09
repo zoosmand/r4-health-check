@@ -2,26 +2,9 @@
   "info": {
     "_postman_id": "37e2ec77-7303-4558-bd9e-19f3d3aaac31",
     "name": "UNO R4 Multi-Service Health Checker API",
-    "description": "API collection for the structured multi-service UNO R4 WiFi health checker.",
+    "description": "API collection for the structured multi-service UNO R4 WiFi health checker. Select the \"UNO R4 Health Checker\" environment (test/UNO_R4_Health_Checker.postman_environment.json) and set baseUrl, serviceId, and apiToken there.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://192.168.1.50",
-      "type": "string"
-    },
-    {
-      "key": "serviceId",
-      "value": "secure",
-      "type": "string"
-    },
-    {
-      "key": "apiToken",
-      "value": "",
-      "type": "string"
-    }
-  ],
   "item": [
     {
       "name": "Status",
@@ -117,6 +100,20 @@
               }
             ],
             "url": "{{baseUrl}}/api/buzzer/test"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Certificate Melody",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/buzzer/melody"
           },
           "response": []
         },

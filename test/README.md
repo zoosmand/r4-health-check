@@ -5,7 +5,15 @@
 `test/host/` contains unit tests for the Arduino-independent helpers in
 `src/UNO_R4_Health_Checker/TextParsing.cpp`: HTTP status and request-line parsing, header matching,
 token comparison, version comparison, and JSON escaping. It also covers the
-heartbeat LED timing in `src/UNO_R4_Health_Checker/HeartbeatPattern.cpp`.
+heartbeat LED timing in `src/UNO_R4_Health_Checker/HeartbeatPattern.cpp`, the UTC date
+handling in `UtcTime.cpp` (HTTP Date, X.509 times, ISO formatting, days
+left), the TLS ClientHello builder and certificate parser in
+`TlsCertificateParser.cpp`, and the melody lookup in `BuzzerMelody.cpp`.
+
+The certificate parser tests use two self-signed public test certificates in
+`test/host/certificate_fixtures.h` (an X.509 v1 one with a UTCTime expiry and
+a v3 one with a GeneralizedTime expiry), wrapped in TLS records fragmented in
+every tested way.
 
     test/host/run.sh
 
@@ -22,17 +30,26 @@ Compiles the firmware with arduino-cli and all warnings enabled.
 ## API tests (Postman)
 
 `UNO_R4_Multi_Service_Health_Checker.postman_collection.json` covers every API
-endpoint. Set the collection variables:
+endpoint. It defines no variables of its own; they come from the environment
+in `UNO_R4_Health_Checker.postman_environment.json`. Import both files,
+select the "UNO R4 Health Checker" environment, and set:
 
 - `baseUrl`: device address, for example `http://192.168.1.50`
-- `serviceId`: an id from `SERVICE_CONFIGS`
+- `serviceId`: an id from `SERVICE_CONFIGS`, for example `acquiring`
 - `apiToken`: the value of `SECRET_API_TOKEN`, or empty when it is not set
+
+`apiToken` is a secret variable. Enter the token in Postman only: keep it
+empty in the committed environment file, and do not export the environment
+back into the repository with a token in it.
 
 ## Target-device checks
 
 Run these by hand after changes that affect hardware behavior:
 
-1. Buzzer test: `POST /api/buzzer/test` sounds for 3 s.
+1. Buzzer test: the buzzer beeps for 500 ms at every boot.
+   `POST /api/buzzer/test` sounds it for 500 ms, and
+   `POST /api/buzzer/melody` plays the certificate warning melody once
+   (about 1 s), also while the buzzer is silenced.
 2. Service alarm: point one service at a host that answers with a non-200
    status. After two checks (about 15 s apart) the service alarm pattern
    sounds and `failing_service_count` is 1.
@@ -56,7 +73,18 @@ Run these by hand after changes that affect hardware behavior:
    prints `Network not ready for 300 s; restarting through the watchdog.`,
    the board resets within about 6 s, and logs
    `WARNING: restarted by the watchdog.` after boot.
-9. Idle sleep: the boot log shows no `idle sleep disabled` warning. The
+9. Certificate expiry: the serial log prints `Reading certificate [...]`
+   and `Certificate expires <date>, <n> days left` for every enabled service
+   after its first health check. `GET /api/services` reports
+   `certificate_not_after` and `certificate_days_left`. To hear the warning,
+   temporarily raise `CERTIFICATE_WARNING_DAYS` above the days left of one
+   service, or use `POST /api/buzzer/melody` to hear the melody only. With
+   the raised threshold, the melody plays once the certificate has been
+   read, and `GET /api/status` reports
+   `"certificate_warning_active":true`.
+   `POST /api/buzzer/silence` mutes it; a failing service's alarm pattern
+   takes precedence over it.
+10. Idle sleep: the boot log shows no `idle sleep disabled` warning. The
    serial log, buzzer patterns, API, and LED matrix behave as before. The
    board's supply current is slightly lower than on a build without the
    `powerManager.idle()` call.

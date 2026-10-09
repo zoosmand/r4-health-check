@@ -6,15 +6,21 @@
 #include "AlarmController.h"
 #include "Heartbeat.h"
 #include "Watchdog.h"
+#include "UtcClock.h"
 
 /*
-  Sequential HTTPS health-check scheduler.
+  Sequential HTTPS health-check and certificate-expiry scheduler.
 
-  update() starts at most one check per call and blocks until that check has
-  finished (DNS, TLS connect, request, status line, headers). Each Wi-Fi
-  module call is bounded by the WiFiS3 modem timeout (10 s); the watchdog is
-  refreshed between those calls and inside the response wait loops. The
-  heartbeat LED is steady on while a check runs.
+  update() starts at most one job per call and blocks until it has finished:
+  either a health check (DNS, TLS connect, request, status line, headers) or
+  a certificate read (TCP connect, ClientHello, Certificate message; see
+  CertificateProbe.h). Health checks take precedence for the same service.
+  Each Wi-Fi module call is bounded by the WiFiS3 modem timeout (10 s); the
+  watchdog is refreshed between those calls and inside the response wait
+  loops. The heartbeat LED is steady on while a job runs.
+
+  The HTTP Date header of every response sets the UTC clock, which turns the
+  certificate expiry dates into the certificate warning.
 */
 class HealthChecker
 {
@@ -46,8 +52,9 @@ public:
   void begin();
 
   /**
-    * @brief Run the next due check, if any. Call only while Wi-Fi is up.
-    *        Blocks for the duration of one check.
+    * @brief Refresh the certificate warning, then run the next due health
+    *        check or certificate read, if any. Call only while Wi-Fi is up.
+    *        Blocks for the duration of one job.
     */
   void update();
 
@@ -66,7 +73,8 @@ public:
   void queueAll();
 
   /**
-    * @brief Request an immediate check of one service.
+    * @brief Request an immediate health check and certificate read of one
+    *        service.
     * @param index (size_t) Service index.
     * @retval (bool) False when the index is invalid or the service disabled.
     */
@@ -86,6 +94,17 @@ public:
 
   size_t checkedServiceCount() const;
 
+  /**
+    * @brief Count enabled services whose certificate is in the warning
+    *        window.
+    */
+  size_t expiringCertificateCount() const;
+
+  /**
+    * @brief Clock set from the HTTP Date headers of the health checks.
+    */
+  const UtcClock &clock() const;
+
 private:
   void performCheck(size_t index);
 
@@ -104,6 +123,18 @@ private:
 
   void refreshAlarmState();
 
+  /**
+    * @brief Read and record the certificate expiry of one service.
+    */
+  void performCertificateCheck(size_t index);
+
+  /**
+    * @brief Recompute certificateExpiring for every service from the clock
+    *        and update the alarm controller. Does nothing until the clock
+    *        is set.
+    */
+  void refreshCertificateWarning();
+
   const ServiceConfig *_configs;
   size_t _serviceCount;
 
@@ -111,6 +142,8 @@ private:
   AlarmController &_alarmController;
   Heartbeat &_heartbeat;
   Watchdog &_watchdog;
+
+  UtcClock _clock;
 
   size_t _roundRobinCursor;
   unsigned long _nextCheckAllowedAtMs;
