@@ -25,7 +25,9 @@ AlarmController::AlarmController(uint8_t pin, uint16_t toneHz)
     _testActive(false),
     _hardwareFault(false),
     _certificateWarning(false),
-    _testStartedAtMs(0)
+    _melodyTestActive(false),
+    _testStartedAtMs(0),
+    _melodyTestStartedAtMs(0)
 {
 }
 
@@ -169,6 +171,18 @@ bool AlarmController::isTestActive() const
   return _testActive;
 }
 
+void AlarmController::startMelodyTest()
+{
+  // Publish the start time before the flag the interrupt checks first.
+  _melodyTestStartedAtMs = millis();
+  _melodyTestActive = true;
+}
+
+bool AlarmController::isMelodyTestActive() const
+{
+  return _melodyTestActive;
+}
+
 void AlarmController::setHardwareFaultPattern()
 {
   _hardwareFault = true;
@@ -206,6 +220,24 @@ void AlarmController::tick()
     }
 
     _testActive = false;
+  }
+
+  if (_melodyTestActive)
+  {
+    uint16_t testHz = 0;
+
+    if (findMelodyFrequency(
+          CERTIFICATE_WARNING_MELODY,
+          CERTIFICATE_WARNING_MELODY_NOTE_COUNT,
+          now - _melodyTestStartedAtMs,
+          testHz
+        ))
+    {
+      writeTone(testHz);
+      return;
+    }
+
+    _melodyTestActive = false;
   }
 
   if (_silenced)

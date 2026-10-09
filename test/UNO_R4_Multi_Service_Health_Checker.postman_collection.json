@@ -121,6 +121,20 @@
           "response": []
         },
         {
+          "name": "Test Certificate Melody",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/buzzer/melody"
+          },
+          "response": []
+        },
+        {
           "name": "Silence Buzzer",
           "request": {
             "method": "POST",

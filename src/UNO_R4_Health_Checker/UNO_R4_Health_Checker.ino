@@ -112,6 +112,9 @@ void setup()
     Serial.println(F("ERROR: buzzer PWM could not be started; buzzer is mute."));
   }
 
+  // Short self-test beep, so a dead buzzer is noticed at every boot.
+  alarmController.startTest();
+
   // Start the watchdog before the first Wi-Fi module call, so a module that
   // never answers resets the board instead of hanging it.
   if (watchdog.begin(WATCHDOG_TIMEOUT_MS, LOOP_WATCHDOG_TIMEOUT_MS))

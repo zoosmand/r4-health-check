@@ -100,7 +100,8 @@ constexpr uint16_t BUZZER_TONE_HZ = 2700;
 // Pattern timer rate. 100 Hz gives 10 ms resolution for the beep edges.
 constexpr float BUZZER_TICK_HZ = 100.0f;
 
-constexpr unsigned long BUZZER_TEST_DURATION_MS = 3000UL;
+// Buzzer test length, also used for the self-test beep at boot.
+constexpr unsigned long BUZZER_TEST_DURATION_MS = 500UL;
 
 // Service alarm: 0-500 ms ON, 500-1000 OFF, 1000-1500 ON, 1500-6000 OFF.
 constexpr unsigned long SERVICE_ALARM_PERIOD_MS = 6000UL;

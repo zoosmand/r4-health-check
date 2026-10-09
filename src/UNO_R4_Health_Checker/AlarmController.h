@@ -20,7 +20,7 @@
   alarm flags and may clear the test flag; every shared flag is a single
   volatile word, so no locking is needed.
 
-  Pattern priority: hardware fault > buzzer test > silenced >
+  Pattern priority: hardware fault > buzzer test > melody test > silenced >
   service alarm > network alarm > certificate warning melody.
 
   The melody keeps its hourly schedule while a higher-priority pattern
@@ -107,6 +107,13 @@ public:
   bool isTestActive() const;
 
   /**
+    * @brief Play CERTIFICATE_WARNING_MELODY once, even while silenced.
+    *        Restarts the melody when it is already playing.
+    */
+  void startMelodyTest();
+  bool isMelodyTestActive() const;
+
+  /**
     * @brief Switch permanently to the fast hardware-fault pattern.
     */
   void setHardwareFaultPattern();
@@ -164,7 +171,9 @@ private:
   volatile bool _testActive;
   volatile bool _hardwareFault;
   volatile bool _certificateWarning;
+  volatile bool _melodyTestActive;
   volatile unsigned long _testStartedAtMs;
+  volatile unsigned long _melodyTestStartedAtMs;
 };
 
 #endif

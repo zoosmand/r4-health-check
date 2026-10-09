@@ -40,7 +40,10 @@ endpoint. Set the collection variables:
 
 Run these by hand after changes that affect hardware behavior:
 
-1. Buzzer test: `POST /api/buzzer/test` sounds for 3 s.
+1. Buzzer test: the buzzer beeps for 500 ms at every boot.
+   `POST /api/buzzer/test` sounds it for 500 ms, and
+   `POST /api/buzzer/melody` plays the certificate warning melody once
+   (about 1 s), also while the buzzer is silenced.
 2. Service alarm: point one service at a host that answers with a non-200
    status. After two checks (about 15 s apart) the service alarm pattern
    sounds and `failing_service_count` is 1.
@@ -69,8 +72,10 @@ Run these by hand after changes that affect hardware behavior:
    after its first health check. `GET /api/services` reports
    `certificate_not_after` and `certificate_days_left`. To hear the warning,
    temporarily raise `CERTIFICATE_WARNING_DAYS` above the days left of one
-   service: the melody plays once the certificate has been read, and
-   `GET /api/status` reports `"certificate_warning_active":true`.
+   service, or use `POST /api/buzzer/melody` to hear the melody only. With
+   the raised threshold, the melody plays once the certificate has been
+   read, and `GET /api/status` reports
+   `"certificate_warning_active":true`.
    `POST /api/buzzer/silence` mutes it; a failing service's alarm pattern
    takes precedence over it.
 10. Idle sleep: the boot log shows no `idle sleep disabled` warning. The

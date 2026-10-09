@@ -78,6 +78,7 @@ void ApiServer::printEndpoints() const
     "POST /api/check",
     "POST /api/services/{id}/check",
     "POST /api/buzzer/test",
+    "POST /api/buzzer/melody",
     "POST /api/buzzer/silence",
     "POST /api/buzzer/unsilence"
   };
@@ -283,6 +284,19 @@ void ApiServer::routeRequest(
     return;
   }
 
+  if (strcmp(path, "/api/buzzer/melody") == 0)
+  {
+    if (!isPost)
+    {
+      sendError(client, 405, "Method Not Allowed", "Use POST");
+      return;
+    }
+
+    _alarmController.startMelodyTest();
+    sendJson(client, 200, "OK", "{\"result\":\"Melody test started\"}");
+    return;
+  }
+
   if (strcmp(path, "/api/buzzer/silence") == 0)
   {
     if (!isPost)
@@ -452,6 +466,10 @@ void ApiServer::sendOverview(WiFiClient &client)
 
   json += "\"buzzer_test_active\":";
   json += boolJson(_alarmController.isTestActive());
+  json += ",";
+
+  json += "\"melody_test_active\":";
+  json += boolJson(_alarmController.isMelodyTestActive());
   json += ",";
 
   json += "\"watchdog_timeout_ms\":";
