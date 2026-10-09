@@ -19,7 +19,7 @@ Watchdog watchdog;
 
 PowerManager powerManager(watchdog);
 
-AlarmController alarmController(BUZZER_PIN, BUZZER_ACTIVE_HIGH);
+AlarmController alarmController(BUZZER_PIN, BUZZER_TONE_HZ);
 
 StatusDisplay statusDisplay;
 
@@ -105,6 +105,11 @@ void setup()
   if (!alarmController.begin())
   {
     Serial.println(F("WARNING: no hardware timer; buzzer runs from loop()."));
+  }
+
+  if (!alarmController.isToneReady())
+  {
+    Serial.println(F("ERROR: buzzer PWM could not be started; buzzer is mute."));
   }
 
   // Start the watchdog before the first Wi-Fi module call, so a module that

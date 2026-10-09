@@ -1,9 +1,13 @@
 #include "AlarmController.h"
 #include "AppConfig.h"
 
-AlarmController::AlarmController(uint8_t pin, bool activeHigh)
+AlarmController::AlarmController(uint8_t pin, float toneHz)
   : _pin(pin),
-    _activeHigh(activeHigh),
+    _toneHz(toneHz),
+    _pwm(pin),
+    _toneReady(false),
+    _toneDutyCounts(0),
+    _outputOn(false),
     _timerRunning(false),
     _serviceAlarm(false),
     _networkAlarm(false),
@@ -16,8 +20,19 @@ AlarmController::AlarmController(uint8_t pin, bool activeHigh)
 
 bool AlarmController::begin()
 {
+  // Hold the pin low until the PWM takes it over.
   pinMode(_pin, OUTPUT);
-  writeOutput(false);
+  digitalWrite(_pin, LOW);
+
+  // Start at 50% so the period is known, then silence at once.
+  _toneReady = _pwm.begin(_toneHz, 50.0f);
+
+  if (_toneReady)
+  {
+    _toneDutyCounts = _pwm.get_timer()->get_period_raw() / 2U;
+    _outputOn = true;
+    writeOutput(false);
+  }
 
   uint8_t timerType = 0;
   const int8_t channel = FspTimer::get_available_timer(timerType);
@@ -52,6 +67,11 @@ void AlarmController::update()
   {
     tick();
   }
+}
+
+bool AlarmController::isToneReady() const
+{
+  return _toneReady;
 }
 
 void AlarmController::setServiceAlarm(bool active)
@@ -182,8 +202,12 @@ void AlarmController::tick()
 
 void AlarmController::writeOutput(bool enabled)
 {
-  const PinStatus activeLevel = _activeHigh ? HIGH : LOW;
-  const PinStatus inactiveLevel = _activeHigh ? LOW : HIGH;
+  if (!_toneReady || enabled == _outputOn)
+  {
+    return;
+  }
 
-  digitalWrite(_pin, enabled ? activeLevel : inactiveLevel);
+  // The new duty takes effect at the end of the current PWM period.
+  _pwm.pulseWidth_raw(static_cast<int>(enabled ? _toneDutyCounts : 0U));
+  _outputOn = enabled;
 }

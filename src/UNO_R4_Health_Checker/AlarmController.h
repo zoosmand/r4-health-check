@@ -3,9 +3,13 @@
 
 #include <Arduino.h>
 #include <FspTimer.h>
+#include <pwm.h>
 
 /*
-  Buzzer driver.
+  Passive buzzer driver.
+
+  The tone is a hardware PWM square wave on the buzzer pin. The pattern only
+  switches its duty between 50% (sounding) and 0% (silent).
 
   The output pattern is generated from a periodic hardware-timer interrupt,
   so the buzzer keeps its pattern while the main loop is blocked in a DNS
@@ -21,14 +25,22 @@
 class AlarmController
 {
 public:
-  AlarmController(uint8_t pin, bool activeHigh);
+  AlarmController(uint8_t pin, float toneHz);
 
   /**
-    * @brief Configure the output pin and start the pattern timer.
+    * @brief Start the tone PWM (silent) and the pattern timer.
     * @retval (bool) True when a hardware timer was acquired. When false, the
     *         pattern is only advanced by update() calls from the main loop.
+    *         The PWM result is reported separately by isToneReady().
     */
   bool begin();
+
+  /**
+    * @brief Report whether the tone PWM was started on the buzzer pin.
+    * @retval (bool) False when the pin has no PWM channel or the channel is
+    *         taken; the buzzer then stays silent.
+    */
+  bool isToneReady() const;
 
   /**
     * @brief Advance the pattern from the main loop. Needed only when begin()
@@ -90,7 +102,12 @@ private:
   void writeOutput(bool enabled);
 
   uint8_t _pin;
-  bool _activeHigh;
+  float _toneHz;
+
+  PwmOut _pwm;
+  bool _toneReady;
+  uint32_t _toneDutyCounts;
+  bool _outputOn;
 
   FspTimer _timer;
   bool _timerRunning;
