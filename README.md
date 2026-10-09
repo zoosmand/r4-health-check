@@ -311,8 +311,9 @@ and answers `401` otherwise. `GET` endpoints stay open. The API uses plain
 HTTP, so the token is visible to anyone who can capture LAN traffic. Do not
 expose the device to an untrusted network.
 
-A Postman collection is in `test/`. Set its `baseUrl` and `apiToken`
-variables.
+A Postman collection and environment are in `test/`. Select the
+environment and set its `baseUrl`, `serviceId`, and `apiToken` variables (see
+[test/README](test/README)).
 
 ## Tests
 

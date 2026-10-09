@@ -30,11 +30,17 @@ Compiles the firmware with arduino-cli and all warnings enabled.
 ## API tests (Postman)
 
 `UNO_R4_Multi_Service_Health_Checker.postman_collection.json` covers every API
-endpoint. Set the collection variables:
+endpoint. It defines no variables of its own; they come from the environment
+in `UNO_R4_Health_Checker.postman_environment.json`. Import both files,
+select the "UNO R4 Health Checker" environment, and set:
 
 - `baseUrl`: device address, for example `http://192.168.1.50`
-- `serviceId`: an id from `SERVICE_CONFIGS`
+- `serviceId`: an id from `SERVICE_CONFIGS`, for example `acquiring`
 - `apiToken`: the value of `SECRET_API_TOKEN`, or empty when it is not set
+
+`apiToken` is a secret variable. Enter the token in Postman only: keep it
+empty in the committed environment file, and do not export the environment
+back into the repository with a token in it.
 
 ## Target-device checks
 
