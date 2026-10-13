@@ -2,9 +2,12 @@
 #define SERVICE_MODELS_H
 
 #include <Arduino.h>
+#include "ResourceAlert.h"
 
 /**
   * @brief Static description of one monitored HTTPS resource.
+  * @param number (uint8_t) Unique resource number from 1 to
+  *        MAX_RESOURCE_NUMBER; the buzzer beeps it to name the resource.
   * @param id (const char*) Unique, URL-safe identifier used by the API.
   * @param name (const char*) Human-readable name.
   * @param host (const char*) DNS host name without scheme; also used for SNI.
@@ -16,6 +19,7 @@
   */
 struct ServiceConfig
 {
+  uint8_t number;
   const char *id;
   const char *name;
   const char *host;
@@ -27,6 +31,31 @@ struct ServiceConfig
 
   bool enabled;
 };
+
+/**
+  * @brief Check that every resource number is in range and unique.
+  * @param configs (const ServiceConfig*) Service table.
+  * @param count (size_t) Number of entries in configs.
+  * @retval (bool) True when the numbers are valid. Meant for static_assert.
+  */
+constexpr bool hasValidResourceNumbers(const ServiceConfig *configs, size_t count)
+{
+  uint8_t seen = 0;
+
+  for (size_t i = 0; i < count; i++)
+  {
+    const uint8_t bit = getResourceBit(configs[i].number);
+
+    if (bit == 0 || (seen & bit) != 0)
+    {
+      return false;
+    }
+
+    seen = static_cast<uint8_t>(seen | bit);
+  }
+
+  return true;
+}
 
 /**
   * @brief Runtime state of one service. All times are millis() values.

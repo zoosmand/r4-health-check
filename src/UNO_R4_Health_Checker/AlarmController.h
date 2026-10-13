@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <FspTimer.h>
 #include <pwm.h>
+#include "ResourceAlert.h"
 
 /*
   Passive buzzer driver.
@@ -12,20 +13,23 @@
   switches its duty between 50% (sounding) and 0% (silent); the certificate
   warning melody also changes the PWM period for each note.
 
+  The service alarm (SOS) and the certificate warning (melody) are followed
+  by counted beeps that name the affected resources (see ResourceAlert.h).
+
   The output pattern is generated from a periodic hardware-timer interrupt,
   so the buzzer keeps its pattern while the main loop is blocked in a DNS
   lookup, TLS handshake, or other long Wi-Fi module call.
 
   All setters are called from thread context. The interrupt only reads the
-  alarm flags and may clear the test flag; every shared flag is a single
-  volatile word, so no locking is needed.
+  alarm flags and resource masks and may clear the test flags; every shared
+  value is a single volatile word, so no locking is needed.
 
   Pattern priority: hardware fault > buzzer test > melody test > silenced >
-  service alarm > network alarm > certificate warning melody.
+  service alarm > network alarm > certificate warning.
 
-  The melody keeps its hourly schedule while a higher-priority pattern
-  sounds or the buzzer is silenced; a slot that falls in that time is
-  skipped, not postponed.
+  The service alarm and the certificate warning keep their schedules while a
+  higher-priority pattern sounds or the buzzer is silenced; a slot that
+  falls in that time is skipped, not postponed.
 */
 class AlarmController
 {
@@ -58,11 +62,14 @@ public:
   void update();
 
   /**
-    * @brief Set whether at least one monitored service is failing.
-    *        A false-to-true transition cancels a manual silence.
-    * @param active (bool) Aggregate service alarm state.
+    * @brief Set the failing resources. While any is set, the SOS signal and
+    *        their numbers play at once and then every
+    *        SERVICE_ALERT_INTERVAL_MS. A change from none to some cancels a
+    *        manual silence.
+    * @param failingResources (uint8_t) Mask of failing resource numbers;
+    *        bit (n - 1) stands for resource n.
     */
-  void setServiceAlarm(bool active);
+  void setServiceAlarm(uint8_t failingResources);
 
   /**
     * @brief Set whether the device itself has lost Wi-Fi for too long.
@@ -78,13 +85,14 @@ public:
   void notifyNewFault();
 
   /**
-    * @brief Set whether at least one server certificate is about to expire.
-    *        While true, CERTIFICATE_WARNING_MELODY plays at once and then
-    *        every CERTIFICATE_WARNING_INTERVAL_MS. A false-to-true transition
-    *        cancels a manual silence.
-    * @param active (bool) Aggregate certificate warning state.
+    * @brief Set the resources whose certificates are about to expire. While
+    *        any is set, CERTIFICATE_WARNING_MELODY and their numbers play at
+    *        once and then every CERTIFICATE_WARNING_INTERVAL_MS. A change
+    *        from none to some cancels a manual silence.
+    * @param expiringResources (uint8_t) Mask of resource numbers; bit
+    *        (n - 1) stands for resource n.
     */
-  void setCertificateWarning(bool active);
+  void setCertificateWarning(uint8_t expiringResources);
   bool isCertificateWarningActive() const;
 
   /**
@@ -127,14 +135,6 @@ private:
     */
   void tick();
 
-  /**
-    * @brief Advance the hourly melody schedule.
-    * @param now (unsigned long) Current millis() value.
-    * @param frequencyHz (uint16_t&) Receives the note or 0 during a rest.
-    * @retval (bool) True while the melody is playing.
-    */
-  bool updateMelody(unsigned long now, uint16_t &frequencyHz);
-
   void writeOutput(bool enabled);
 
   /**
@@ -158,19 +158,19 @@ private:
   uint16_t _periodHz;
   uint16_t _outputHz;
 
-  // Melody schedule, owned by tick().
-  bool _melodyScheduled;
-  unsigned long _melodyStartedAtMs;
+  // Alert schedules, owned by tick().
+  ResourceAlertSchedule _serviceAlert;
+  ResourceAlertSchedule _certificateAlert;
 
   FspTimer _timer;
   bool _timerRunning;
 
-  volatile bool _serviceAlarm;
+  volatile uint8_t _failingResources;
   volatile bool _networkAlarm;
   volatile bool _silenced;
   volatile bool _testActive;
   volatile bool _hardwareFault;
-  volatile bool _certificateWarning;
+  volatile uint8_t _expiringResources;
   volatile bool _melodyTestActive;
   volatile unsigned long _testStartedAtMs;
   volatile unsigned long _melodyTestStartedAtMs;

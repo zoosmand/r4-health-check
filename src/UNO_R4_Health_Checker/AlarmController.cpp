@@ -16,15 +16,15 @@ AlarmController::AlarmController(uint8_t pin, uint16_t toneHz)
     _periodCounts(0),
     _periodHz(0),
     _outputHz(0),
-    _melodyScheduled(false),
-    _melodyStartedAtMs(0),
+    _serviceAlert(SERVICE_ALERT_PATTERN, SERVICE_ALERT_INTERVAL_MS),
+    _certificateAlert(CERTIFICATE_ALERT_PATTERN, CERTIFICATE_WARNING_INTERVAL_MS),
     _timerRunning(false),
-    _serviceAlarm(false),
+    _failingResources(0),
     _networkAlarm(false),
     _silenced(false),
     _testActive(false),
     _hardwareFault(false),
-    _certificateWarning(false),
+    _expiringResources(0),
     _melodyTestActive(false),
     _testStartedAtMs(0),
     _melodyTestStartedAtMs(0)
@@ -89,14 +89,14 @@ bool AlarmController::isToneReady() const
   return _toneReady;
 }
 
-void AlarmController::setServiceAlarm(bool active)
+void AlarmController::setServiceAlarm(uint8_t failingResources)
 {
-  if (active && !_serviceAlarm)
+  if (failingResources != 0 && _failingResources == 0)
   {
     _silenced = false;
   }
 
-  _serviceAlarm = active;
+  _failingResources = failingResources;
 }
 
 void AlarmController::setNetworkAlarm(bool active)
@@ -114,29 +114,29 @@ void AlarmController::notifyNewFault()
   _silenced = false;
 }
 
-void AlarmController::setCertificateWarning(bool active)
+void AlarmController::setCertificateWarning(uint8_t expiringResources)
 {
-  if (active && !_certificateWarning)
+  if (expiringResources != 0 && _expiringResources == 0)
   {
     _silenced = false;
   }
 
-  _certificateWarning = active;
+  _expiringResources = expiringResources;
 }
 
 bool AlarmController::isCertificateWarningActive() const
 {
-  return _certificateWarning;
+  return _expiringResources != 0;
 }
 
 bool AlarmController::isAlarmActive() const
 {
-  return _serviceAlarm || _networkAlarm;
+  return _failingResources != 0 || _networkAlarm;
 }
 
 bool AlarmController::isServiceAlarmActive() const
 {
-  return _serviceAlarm;
+  return _failingResources != 0;
 }
 
 bool AlarmController::isNetworkAlarmActive() const
@@ -200,10 +200,14 @@ void AlarmController::tick()
 {
   const unsigned long now = millis();
 
-  // Advance the melody schedule first, so it keeps its cadence while a
+  // Advance the alert schedules first, so they keep their cadence while a
   // higher-priority pattern sounds.
-  uint16_t melodyHz = 0;
-  const bool melodyPlaying = updateMelody(now, melodyHz);
+  uint16_t serviceHz = 0;
+  _serviceAlert.update(_failingResources, now, serviceHz);
+
+  uint16_t certificateHz = 0;
+  const bool certificatePlaying =
+    _certificateAlert.update(_expiringResources, now, certificateHz);
 
   if (_hardwareFault)
   {
@@ -246,11 +250,11 @@ void AlarmController::tick()
     return;
   }
 
-  if (_serviceAlarm)
+  if (_failingResources != 0)
   {
-    // Two short beeps, then a pause.
-    const unsigned long position = now % SERVICE_ALARM_PERIOD_MS;
-    writeOutput(position < 500UL || (position >= 1000UL && position < 1500UL));
+    // SOS and the failing resource numbers, then silence until the next
+    // slot. The silence also keeps the lower-priority patterns quiet.
+    writeTone(serviceHz);
     return;
   }
 
@@ -262,42 +266,13 @@ void AlarmController::tick()
     return;
   }
 
-  if (melodyPlaying)
+  if (certificatePlaying)
   {
-    writeTone(melodyHz);
+    writeTone(certificateHz);
     return;
   }
 
   writeOutput(false);
-}
-
-bool AlarmController::updateMelody(unsigned long now, uint16_t &frequencyHz)
-{
-  frequencyHz = 0;
-
-  if (!_certificateWarning)
-  {
-    _melodyScheduled = false;
-    return false;
-  }
-
-  if (!_melodyScheduled)
-  {
-    // The warning has just started: play at once.
-    _melodyScheduled = true;
-    _melodyStartedAtMs = now;
-  }
-  else if (now - _melodyStartedAtMs >= CERTIFICATE_WARNING_INTERVAL_MS)
-  {
-    _melodyStartedAtMs = now;
-  }
-
-  return findMelodyFrequency(
-    CERTIFICATE_WARNING_MELODY,
-    CERTIFICATE_WARNING_MELODY_NOTE_COUNT,
-    now - _melodyStartedAtMs,
-    frequencyHz
-  );
 }
 
 void AlarmController::writeOutput(bool enabled)

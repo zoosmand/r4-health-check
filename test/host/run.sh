@@ -50,3 +50,12 @@ mkdir -p "$OUT"
   -o "$OUT/buzzer_melody_test"
 
 "$OUT/buzzer_melody_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/resource_alert_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/ResourceAlert.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/BuzzerMelody.cpp" \
+  -o "$OUT/resource_alert_test"
+
+"$OUT/resource_alert_test"

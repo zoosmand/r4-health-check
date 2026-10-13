@@ -14,7 +14,8 @@
   update() starts at most one job per call and blocks until it has finished:
   either a health check (DNS, TLS connect, request, status line, headers) or
   a certificate read (TCP connect, ClientHello, Certificate message; see
-  CertificateProbe.h). Health checks take precedence for the same service.
+  CertificateProbe.h). Health checks take precedence for the same service,
+  and a failing service's certificate reads are paused until it recovers.
   Each Wi-Fi module call is bounded by the WiFiS3 modem timeout (10 s); the
   watchdog is refreshed between those calls and inside the response wait
   loops. The heartbeat LED is steady on while a job runs.
@@ -74,7 +75,8 @@ public:
 
   /**
     * @brief Request an immediate health check and certificate read of one
-    *        service.
+    *        service. The certificate read waits while this service is
+    *        failing.
     * @param index (size_t) Service index.
     * @retval (bool) False when the index is invalid or the service disabled.
     */
@@ -85,6 +87,13 @@ public:
     * @retval (size_t) Number of failing services.
     */
   size_t failingServiceCount() const;
+
+  /**
+    * @brief Resource numbers of the enabled services at or above
+    *        FAILURE_THRESHOLD.
+    * @retval (uint8_t) Mask; bit (n - 1) stands for resource n.
+    */
+  uint8_t failingResourceMask() const;
 
   /**
     * @brief Report whether every checked service passed its last check.
@@ -99,6 +108,13 @@ public:
     *        window.
     */
   size_t expiringCertificateCount() const;
+
+  /**
+    * @brief Resource numbers of the enabled services whose certificate is in
+    *        the warning window.
+    * @retval (uint8_t) Mask; bit (n - 1) stands for resource n.
+    */
+  uint8_t expiringCertificateMask() const;
 
   /**
     * @brief Clock set from the HTTP Date headers of the health checks.

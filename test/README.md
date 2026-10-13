@@ -8,7 +8,8 @@ token comparison, version comparison, and JSON escaping. It also covers the
 heartbeat LED timing in `src/UNO_R4_Health_Checker/HeartbeatPattern.cpp`, the UTC date
 handling in `UtcTime.cpp` (HTTP Date, X.509 times, ISO formatting, days
 left), the TLS ClientHello builder and certificate parser in
-`TlsCertificateParser.cpp`, and the melody lookup in `BuzzerMelody.cpp`.
+`TlsCertificateParser.cpp`, the melody lookup in `BuzzerMelody.cpp`, and the
+resource alert layout and schedule in `ResourceAlert.cpp`.
 
 The certificate parser tests use two self-signed public test certificates in
 `test/host/certificate_fixtures.h` (an X.509 v1 one with a UTCTime expiry and
@@ -50,11 +51,14 @@ Run these by hand after changes that affect hardware behavior:
    `POST /api/buzzer/test` sounds it for 500 ms, and
    `POST /api/buzzer/melody` plays the certificate warning melody once
    (about 1 s), also while the buzzer is silenced.
-2. Service alarm: point one service at a host that answers with a non-200
-   status. After two checks (about 15 s apart) the service alarm pattern
-   sounds and `failing_service_count` is 1.
+2. Service alarm: point one service (for example number 2) at a path that
+   answers with a non-200 status. After two checks (about 15 s apart) the
+   log prints `Service failing: #2 ...`, the buzzer plays SOS, a 1 s pause,
+   and two short beeps, and `failing_service_count` is 1. The alarm repeats
+   every minute.
 3. Silence and re-arm: silence the alarm, then make a second service fail.
-   The buzzer sounds again.
+   The buzzer sounds again right after any alarm in progress, and names both
+   resources in ascending order, each group after a 1 s pause.
 4. LED matrix: while a service is failing, the matrix shows the caution
    triangle, including while the buzzer is silenced. It turns off after the
    service recovers.
@@ -80,10 +84,13 @@ Run these by hand after changes that affect hardware behavior:
    temporarily raise `CERTIFICATE_WARNING_DAYS` above the days left of one
    service, or use `POST /api/buzzer/melody` to hear the melody only. With
    the raised threshold, the melody plays once the certificate has been
-   read, and `GET /api/status` reports
-   `"certificate_warning_active":true`.
+   read, followed by a 1 s pause and the resource's number in short beeps,
+   and `GET /api/status` reports `"certificate_warning_active":true`.
    `POST /api/buzzer/silence` mutes it; a failing service's alarm pattern
-   takes precedence over it.
+   takes precedence over it. While a service is failing, the log shows no
+   `Reading certificate [...]` line for that service, while the other
+   services' certificates are still read; its pending read runs after it
+   recovers.
 10. Idle sleep: the boot log shows no `idle sleep disabled` warning. The
    serial log, buzzer patterns, API, and LED matrix behave as before. The
    board's supply current is slightly lower than on a build without the

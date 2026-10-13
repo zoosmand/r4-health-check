@@ -529,6 +529,10 @@ String ApiServer::buildServiceJson(size_t index) const
 
   json += "{";
 
+  json += "\"number\":";
+  json += String(config.number);
+  json += ",";
+
   json += "\"id\":\"";
   json += escapeJson(config.id);
   json += "\",";
