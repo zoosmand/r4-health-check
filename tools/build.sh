@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 #
+# ******************************************************************************
+# @file           : build.sh
+# @brief          : Compiles the firmware and optionally uploads it.
+# @project        : UNO R4 WiFi Multi-Service Health Checker
+# @platform       : Host computer (bash)
+# @created        : 27.09.2026
+# ******************************************************************************
+# @attention
+#
+# Copyright (c) 2017-2026 Dmitry Slobodchikov
+# All rights reserved.
+#
+# This software is licensed under terms that can be found in the LICENSE file
+# in the root directory of this software component.
+# If no LICENSE file comes with this software, it is provided AS-IS.
+#
+# ******************************************************************************
+#
 # Compile the firmware with arduino-cli.
 #
 # The sketch lives in src/UNO_R4_Health_Checker/ and is compiled in place.
@@ -14,6 +32,9 @@
 # Environment:
 #   ARDUINO_CLI   arduino-cli executable (default: arduino-cli from PATH)
 #   FQBN          board (default: arduino:renesas_uno:unor4wifi)
+#
+# Before compiling, ApiVersion.h is regenerated from .version (see
+# tools/generate_api_version.sh).
 #
 # When src/UNO_R4_Health_Checker/arduino_secrets.h is missing (for example
 # in CI), the sketch is copied to build/ and compiled with the example
@@ -38,6 +59,9 @@ done
 shift $((OPTIND - 1))
 
 mkdir -p "$OUTPUT"
+
+# The API version lives in .version, which the Arduino build cannot read.
+"$ROOT/tools/generate_api_version.sh"
 
 if [[ ! -f "$SKETCH/arduino_secrets.h" ]]; then
   echo "warning: $SKETCH_NAME/arduino_secrets.h not found; building a copy with the example credentials" >&2

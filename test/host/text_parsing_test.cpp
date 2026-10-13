@@ -1,4 +1,22 @@
-// Host-side unit tests for src/UNO_R4_Health_Checker/TextParsing.cpp. Run with test/host/run.sh.
+/**
+  ******************************************************************************
+  * @file           : text_parsing_test.cpp
+  * @brief          : Host tests for TextParsing (test/host/run.sh).
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Host computer (C++17 unit tests)
+  * @created        : 27.09.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 
 #include "../../src/UNO_R4_Health_Checker/TextParsing.h"
 
@@ -20,6 +38,9 @@ static int checks = 0;
     }                                                                        \
   } while (0)
 
+/**
+  * @brief Valid and malformed HTTP status lines.
+  */
 static void testParseHttpStatusCode()
 {
   EXPECT(parseHttpStatusCode("HTTP/1.1 200 OK") == 200);
@@ -38,6 +59,11 @@ static void testParseHttpStatusCode()
   EXPECT(parseHttpStatusCode("SSH-2.0-OpenSSH") == 0);
 }
 
+/**
+  * @brief Request line parsing, removal of query strings and fragments,
+  *        malformed
+  *        lines, and the path buffer limit.
+  */
 static void testParseHttpRequestLine()
 {
   char method[8];
@@ -69,6 +95,10 @@ static void testParseHttpRequestLine()
                                method, sizeof(method), path, sizeof(path)));
 }
 
+/**
+  * @brief Case-insensitive header names, a tab after the colon, and near-miss
+  *        names.
+  */
 static void testMatchHttpHeader()
 {
   const char *value = matchHttpHeader("Authorization: Bearer abc", "Authorization");
@@ -82,6 +112,9 @@ static void testMatchHttpHeader()
   EXPECT(matchHttpHeader("", "Authorization") == nullptr);
 }
 
+/**
+  * @brief Equal, different, and different-length strings.
+  */
 static void testConstantTimeEquals()
 {
   EXPECT(constantTimeEquals("secret", "secret"));
@@ -92,6 +125,9 @@ static void testConstantTimeEquals()
   EXPECT(constantTimeEquals("", ""));
 }
 
+/**
+  * @brief Dotted version ordering, including missing components.
+  */
 static void testCompareVersions()
 {
   EXPECT(compareVersions("0.6.0", "0.6.0") == 0);
@@ -102,6 +138,36 @@ static void testCompareVersions()
   EXPECT(compareVersions("0.6.0", "0.6.1") < 0);
 }
 
+/**
+  * @brief Digit-only numbers, range limits, overflow, and rejected characters.
+  */
+static void testParseDecimalNumber()
+{
+  unsigned long value = 99;
+
+  EXPECT(parseDecimalNumber("1", 5, value) && value == 1);
+  EXPECT(parseDecimalNumber("5", 5, value) && value == 5);
+  EXPECT(parseDecimalNumber("0", 5, value) && value == 0);
+  EXPECT(parseDecimalNumber("007", 10, value) && value == 7);
+  EXPECT(parseDecimalNumber("4294967295", 4294967295UL, value) &&
+         value == 4294967295UL);
+
+  value = 99;
+  EXPECT(!parseDecimalNumber("6", 5, value));
+  EXPECT(!parseDecimalNumber("", 5, value));
+  EXPECT(!parseDecimalNumber("-1", 5, value));
+  EXPECT(!parseDecimalNumber("+1", 5, value));
+  EXPECT(!parseDecimalNumber(" 1", 5, value));
+  EXPECT(!parseDecimalNumber("1/", 5, value));
+  EXPECT(!parseDecimalNumber("1a", 5, value));
+  EXPECT(!parseDecimalNumber("4294967296", 4294967295UL, value));
+  EXPECT(!parseDecimalNumber("99999999999999999999", 4294967295UL, value));
+  EXPECT(value == 99);
+}
+
+/**
+  * @brief JSON escapes for quotes, backslashes, and control characters.
+  */
 static void testEscapeJsonChar()
 {
   char out[7];
@@ -114,6 +180,10 @@ static void testEscapeJsonChar()
   EXPECT(escapeJsonChar('\x1f', out) == 6 && std::strcmp(out, "\\u001f") == 0);
 }
 
+/**
+  * @brief Run every test and print the totals.
+  * @retval (int) 0 when every expectation held, 1 otherwise.
+  */
 int main()
 {
   testParseHttpStatusCode();
@@ -122,6 +192,7 @@ int main()
   testConstantTimeEquals();
   testCompareVersions();
   testEscapeJsonChar();
+  testParseDecimalNumber();
 
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

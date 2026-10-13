@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : HealthChecker.cpp
+  * @brief          : Scheduler for HTTPS health checks and certificate reads.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "HealthChecker.h"
 #include "AppConfig.h"
 #include "HttpLineReader.h"
@@ -120,9 +140,13 @@ void HealthChecker::update()
       state.checkQueued ||
       static_cast<long>(now - state.nextCheckAtMs) >= 0;
 
+    // A failing service is already in the service alarm, so reading its
+    // certificate only adds load. Its due or queued read stays pending until
+    // the service recovers; other services' reads continue.
     const bool certificateCheckDue =
-      state.certificateCheckQueued ||
-      static_cast<long>(now - state.nextCertificateCheckAtMs) >= 0;
+      !state.failing &&
+      (state.certificateCheckQueued ||
+       static_cast<long>(now - state.nextCertificateCheckAtMs) >= 0);
 
     if ((!checkDue && !certificateCheckDue) || state.checkInProgress)
     {
@@ -215,6 +239,21 @@ size_t HealthChecker::failingServiceCount() const
   return result;
 }
 
+uint8_t HealthChecker::failingResourceMask() const
+{
+  uint8_t result = 0;
+
+  for (size_t i = 0; i < _serviceCount; i++)
+  {
+    if (_configs[i].enabled && _states[i].failing)
+    {
+      result = static_cast<uint8_t>(result | getResourceBit(_configs[i].number));
+    }
+  }
+
+  return result;
+}
+
 bool HealthChecker::allCheckedServicesHealthy() const
 {
   bool foundCheckedService = false;
@@ -246,6 +285,21 @@ size_t HealthChecker::expiringCertificateCount() const
     if (_configs[i].enabled && _states[i].certificateExpiring)
     {
       result++;
+    }
+  }
+
+  return result;
+}
+
+uint8_t HealthChecker::expiringCertificateMask() const
+{
+  uint8_t result = 0;
+
+  for (size_t i = 0; i < _serviceCount; i++)
+  {
+    if (_configs[i].enabled && _states[i].certificateExpiring)
+    {
+      result = static_cast<uint8_t>(result | getResourceBit(_configs[i].number));
     }
   }
 
@@ -523,6 +577,10 @@ void HealthChecker::recordResult(size_t index, bool healthy)
   // even when other services are already failing.
   if (state.failing && !wasFailing)
   {
+    Serial.print(F("Service failing: #"));
+    Serial.print(config.number);
+    Serial.print(F(" "));
+    Serial.println(config.id);
     _alarmController.notifyNewFault();
   }
 
@@ -531,7 +589,7 @@ void HealthChecker::recordResult(size_t index, bool healthy)
 
 void HealthChecker::refreshAlarmState()
 {
-  _alarmController.setServiceAlarm(failingServiceCount() > 0);
+  _alarmController.setServiceAlarm(failingResourceMask());
 }
 
 void HealthChecker::performCertificateCheck(size_t index)
@@ -614,7 +672,6 @@ void HealthChecker::refreshCertificateWarning()
   }
 
   const uint32_t now = _clock.nowUnixSeconds();
-  bool anyExpiring = false;
 
   for (size_t i = 0; i < _serviceCount; i++)
   {
@@ -630,14 +687,15 @@ void HealthChecker::refreshCertificateWarning()
     // even when another one is already in it.
     if (expiring && !state.certificateExpiring)
     {
-      Serial.print(F("Certificate expiring soon: "));
+      Serial.print(F("Certificate expiring soon: #"));
+      Serial.print(_configs[i].number);
+      Serial.print(F(" "));
       Serial.println(_configs[i].id);
       _alarmController.notifyNewFault();
     }
 
     state.certificateExpiring = expiring;
-    anyExpiring = anyExpiring || expiring;
   }
 
-  _alarmController.setCertificateWarning(anyExpiring);
+  _alarmController.setCertificateWarning(expiringCertificateMask());
 }

@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : AlarmController.cpp
+  * @brief          : Passive buzzer driver: alarm patterns, SOS, and melodies.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "AlarmController.h"
 #include "AppConfig.h"
 
@@ -16,18 +36,20 @@ AlarmController::AlarmController(uint8_t pin, uint16_t toneHz)
     _periodCounts(0),
     _periodHz(0),
     _outputHz(0),
-    _melodyScheduled(false),
-    _melodyStartedAtMs(0),
+    _serviceAlert(SERVICE_ALERT_PATTERN, SERVICE_ALERT_INTERVAL_MS),
+    _certificateAlert(CERTIFICATE_ALERT_PATTERN, CERTIFICATE_WARNING_INTERVAL_MS),
     _timerRunning(false),
-    _serviceAlarm(false),
+    _failingResources(0),
     _networkAlarm(false),
     _silenced(false),
     _testActive(false),
     _hardwareFault(false),
-    _certificateWarning(false),
-    _melodyTestActive(false),
+    _expiringResources(0),
+    _alertTestActive(false),
+    _alertTestCertificate(false),
+    _alertTestMask(0),
     _testStartedAtMs(0),
-    _melodyTestStartedAtMs(0)
+    _alertTestStartedAtMs(0)
 {
 }
 
@@ -89,14 +111,14 @@ bool AlarmController::isToneReady() const
   return _toneReady;
 }
 
-void AlarmController::setServiceAlarm(bool active)
+void AlarmController::setServiceAlarm(uint8_t failingResources)
 {
-  if (active && !_serviceAlarm)
+  if (failingResources != 0 && _failingResources == 0)
   {
     _silenced = false;
   }
 
-  _serviceAlarm = active;
+  _failingResources = failingResources;
 }
 
 void AlarmController::setNetworkAlarm(bool active)
@@ -114,29 +136,29 @@ void AlarmController::notifyNewFault()
   _silenced = false;
 }
 
-void AlarmController::setCertificateWarning(bool active)
+void AlarmController::setCertificateWarning(uint8_t expiringResources)
 {
-  if (active && !_certificateWarning)
+  if (expiringResources != 0 && _expiringResources == 0)
   {
     _silenced = false;
   }
 
-  _certificateWarning = active;
+  _expiringResources = expiringResources;
 }
 
 bool AlarmController::isCertificateWarningActive() const
 {
-  return _certificateWarning;
+  return _expiringResources != 0;
 }
 
 bool AlarmController::isAlarmActive() const
 {
-  return _serviceAlarm || _networkAlarm;
+  return _failingResources != 0 || _networkAlarm;
 }
 
 bool AlarmController::isServiceAlarmActive() const
 {
-  return _serviceAlarm;
+  return _failingResources != 0;
 }
 
 bool AlarmController::isNetworkAlarmActive() const
@@ -171,16 +193,21 @@ bool AlarmController::isTestActive() const
   return _testActive;
 }
 
-void AlarmController::startMelodyTest()
+void AlarmController::startAlertTest(AlertTest alert, uint8_t resourceMask)
 {
-  // Publish the start time before the flag the interrupt checks first.
-  _melodyTestStartedAtMs = millis();
-  _melodyTestActive = true;
+  // The interrupt reads the parameters only while the flag is set, and it
+  // cannot be interrupted by this code. Clearing the flag first means it
+  // never sees a mix of old and new parameters.
+  _alertTestActive = false;
+  _alertTestCertificate = alert == AlertTest::CERTIFICATE;
+  _alertTestMask = resourceMask;
+  _alertTestStartedAtMs = millis();
+  _alertTestActive = true;
 }
 
-bool AlarmController::isMelodyTestActive() const
+bool AlarmController::isAlertTestActive() const
 {
-  return _melodyTestActive;
+  return _alertTestActive;
 }
 
 void AlarmController::setHardwareFaultPattern()
@@ -200,10 +227,14 @@ void AlarmController::tick()
 {
   const unsigned long now = millis();
 
-  // Advance the melody schedule first, so it keeps its cadence while a
+  // Advance the alert schedules first, so they keep their cadence while a
   // higher-priority pattern sounds.
-  uint16_t melodyHz = 0;
-  const bool melodyPlaying = updateMelody(now, melodyHz);
+  uint16_t serviceHz = 0;
+  _serviceAlert.update(_failingResources, now, serviceHz);
+
+  uint16_t certificateHz = 0;
+  const bool certificatePlaying =
+    _certificateAlert.update(_expiringResources, now, certificateHz);
 
   if (_hardwareFault)
   {
@@ -222,14 +253,17 @@ void AlarmController::tick()
     _testActive = false;
   }
 
-  if (_melodyTestActive)
+  if (_alertTestActive)
   {
+    const ResourceAlertPattern &pattern =
+      _alertTestCertificate ? CERTIFICATE_ALERT_PATTERN : SERVICE_ALERT_PATTERN;
+
     uint16_t testHz = 0;
 
-    if (findMelodyFrequency(
-          CERTIFICATE_WARNING_MELODY,
-          CERTIFICATE_WARNING_MELODY_NOTE_COUNT,
-          now - _melodyTestStartedAtMs,
+    if (findResourceAlertFrequency(
+          pattern,
+          _alertTestMask,
+          now - _alertTestStartedAtMs,
           testHz
         ))
     {
@@ -237,7 +271,7 @@ void AlarmController::tick()
       return;
     }
 
-    _melodyTestActive = false;
+    _alertTestActive = false;
   }
 
   if (_silenced)
@@ -246,11 +280,11 @@ void AlarmController::tick()
     return;
   }
 
-  if (_serviceAlarm)
+  if (_failingResources != 0)
   {
-    // Two short beeps, then a pause.
-    const unsigned long position = now % SERVICE_ALARM_PERIOD_MS;
-    writeOutput(position < 500UL || (position >= 1000UL && position < 1500UL));
+    // SOS and the failing resource numbers, then silence until the next
+    // slot. The silence also keeps the lower-priority patterns quiet.
+    writeTone(serviceHz);
     return;
   }
 
@@ -262,42 +296,13 @@ void AlarmController::tick()
     return;
   }
 
-  if (melodyPlaying)
+  if (certificatePlaying)
   {
-    writeTone(melodyHz);
+    writeTone(certificateHz);
     return;
   }
 
   writeOutput(false);
-}
-
-bool AlarmController::updateMelody(unsigned long now, uint16_t &frequencyHz)
-{
-  frequencyHz = 0;
-
-  if (!_certificateWarning)
-  {
-    _melodyScheduled = false;
-    return false;
-  }
-
-  if (!_melodyScheduled)
-  {
-    // The warning has just started: play at once.
-    _melodyScheduled = true;
-    _melodyStartedAtMs = now;
-  }
-  else if (now - _melodyStartedAtMs >= CERTIFICATE_WARNING_INTERVAL_MS)
-  {
-    _melodyStartedAtMs = now;
-  }
-
-  return findMelodyFrequency(
-    CERTIFICATE_WARNING_MELODY,
-    CERTIFICATE_WARNING_MELODY_NOTE_COUNT,
-    now - _melodyStartedAtMs,
-    frequencyHz
-  );
 }
 
 void AlarmController::writeOutput(bool enabled)

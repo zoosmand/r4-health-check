@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : UNO_R4_Health_Checker.ino
+  * @brief          : Application entry point: setup() and loop().
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "AppConfig.h"
 #include "AlarmController.h"
 #include "NetworkManager.h"
@@ -81,6 +101,12 @@ ApiServer apiServer(
   }
 }
 
+/**
+  * @brief Arduino entry point, run once after reset: start the serial log,
+  *        buzzer, watchdog, LED matrix, idle sleep, health checker, Wi-Fi,
+  *        and API server. Halts with the hardware-fault pattern when the
+  *        Wi-Fi module does not respond.
+  */
 void setup()
 {
   const bool watchdogReset = Watchdog::consumeWatchdogResetFlag();
@@ -163,6 +189,11 @@ void setup()
   // assigned an address, which may happen after setup() returns.
 }
 
+/**
+  * @brief Arduino main loop: one bounded step of every job per pass (Wi-Fi,
+  *        alarms, API, health checks, LED matrix, heartbeat), then idle
+  *        sleep. Refreshes the watchdog between the steps.
+  */
 void loop()
 {
   watchdog.refresh();

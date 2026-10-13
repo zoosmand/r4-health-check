@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : AppConfig.h
+  * @brief          : Monitored services, timeouts, and hardware settings.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
@@ -5,6 +25,7 @@
 #include "ServiceModels.h"
 #include "HeartbeatPattern.h"
 #include "BuzzerMelody.h"
+#include "ResourceAlert.h"
 
 // -----------------------------------------------------------------------------
 // General
@@ -103,8 +124,53 @@ constexpr float BUZZER_TICK_HZ = 100.0f;
 // Buzzer test length, also used for the self-test beep at boot.
 constexpr unsigned long BUZZER_TEST_DURATION_MS = 500UL;
 
-// Service alarm: 0-500 ms ON, 500-1000 OFF, 1000-1500 ON, 1500-6000 OFF.
-constexpr unsigned long SERVICE_ALARM_PERIOD_MS = 6000UL;
+// Counted beeps that follow the SOS signal and the certificate warning
+// melody: one group per affected resource, as many beeps as its number, each
+// group after RESOURCE_PAUSE_MS of silence (see ResourceAlert.h).
+constexpr uint16_t RESOURCE_BEEP_MS = 200;
+constexpr uint16_t RESOURCE_BEEP_GAP_MS = 300;
+constexpr uint16_t RESOURCE_PAUSE_MS = 1000;
+
+// Service alarm: SOS in Morse code (... --- ...) with a 120 ms unit, about
+// 3.2 s long, then the numbers of the failing resources.
+constexpr uint16_t SOS_UNIT_MS = 120;
+
+const MelodyNote SOS_SIGNAL[] = {
+  {BUZZER_TONE_HZ, SOS_UNIT_MS},
+  {0, SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, SOS_UNIT_MS},
+  {0, SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, SOS_UNIT_MS},
+  {0, 3 * SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, 3 * SOS_UNIT_MS},
+  {0, SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, 3 * SOS_UNIT_MS},
+  {0, SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, 3 * SOS_UNIT_MS},
+  {0, 3 * SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, SOS_UNIT_MS},
+  {0, SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, SOS_UNIT_MS},
+  {0, SOS_UNIT_MS},
+  {BUZZER_TONE_HZ, SOS_UNIT_MS}
+};
+
+constexpr size_t SOS_SIGNAL_NOTE_COUNT =
+  sizeof(SOS_SIGNAL) / sizeof(SOS_SIGNAL[0]);
+
+const ResourceAlertPattern SERVICE_ALERT_PATTERN = {
+  SOS_SIGNAL,
+  SOS_SIGNAL_NOTE_COUNT,
+  BUZZER_TONE_HZ,
+  RESOURCE_BEEP_MS,
+  RESOURCE_BEEP_GAP_MS,
+  RESOURCE_PAUSE_MS
+};
+
+// The service alarm plays as soon as a service starts failing, then once per
+// interval while any service is failing. With all five resources affected,
+// one alarm lasts about 14 s.
+constexpr unsigned long SERVICE_ALERT_INTERVAL_MS = 60UL * 1000UL;
 
 // Network alarm: 0-1500 ms ON, 1500-10000 OFF.
 constexpr unsigned long NETWORK_ALARM_PERIOD_MS = 10000UL;
@@ -126,7 +192,18 @@ const MelodyNote CERTIFICATE_WARNING_MELODY[] = {
 constexpr size_t CERTIFICATE_WARNING_MELODY_NOTE_COUNT =
   sizeof(CERTIFICATE_WARNING_MELODY) / sizeof(CERTIFICATE_WARNING_MELODY[0]);
 
-// The melody plays as soon as a certificate enters the warning window, then
+// The melody is followed by the numbers of the resources whose certificates
+// are expiring.
+const ResourceAlertPattern CERTIFICATE_ALERT_PATTERN = {
+  CERTIFICATE_WARNING_MELODY,
+  CERTIFICATE_WARNING_MELODY_NOTE_COUNT,
+  BUZZER_TONE_HZ,
+  RESOURCE_BEEP_MS,
+  RESOURCE_BEEP_GAP_MS,
+  RESOURCE_PAUSE_MS
+};
+
+// The warning plays as soon as a certificate enters the warning window, then
 // once per interval while any certificate is in it.
 constexpr unsigned long CERTIFICATE_WARNING_INTERVAL_MS = 60UL * 60UL * 1000UL;
 
@@ -171,9 +248,11 @@ constexpr unsigned long CERTIFICATE_CHECK_INTERVAL_MS = 12UL * 60UL * 60UL * 100
 // Retry interval after a failed certificate read.
 constexpr unsigned long CERTIFICATE_RETRY_INTERVAL_MS = 60UL * 60UL * 1000UL;
 
-// Add or remove entries here.
+// Add or remove entries here, at most MAX_RESOURCE_NUMBER (5).
 //
 // Important:
+//   - number must be unique and from 1 to MAX_RESOURCE_NUMBER; the buzzer
+//     beeps it to name the resource
 //   - host must not contain "https://"
 //   - path must begin with "/"
 //   - each id must be unique and URL-safe
@@ -181,8 +260,9 @@ constexpr unsigned long CERTIFICATE_RETRY_INTERVAL_MS = 60UL * 60UL * 1000UL;
 // The UNO R4 WiFi certificate store must contain the root CA required by each
 // HTTPS host.
 
-const ServiceConfig SERVICE_CONFIGS[] = {
+constexpr ServiceConfig SERVICE_CONFIGS[] = {
   {
+    1,
     "acquiring",
     "Intraclear Old Acquiring",
     "secure.intraclear.com",
@@ -193,6 +273,7 @@ const ServiceConfig SERVICE_CONFIGS[] = {
     true
   },
   {
+    2,
     "website",
     "Intraclear Public Website",
     "intraclear.com",
@@ -203,6 +284,7 @@ const ServiceConfig SERVICE_CONFIGS[] = {
     true
   },
   {
+    3,
     "ebank",
     "Intraclear E-Bank",
     "ebank.intraclear.com",
@@ -213,6 +295,7 @@ const ServiceConfig SERVICE_CONFIGS[] = {
     true
   },
   {
+    4,
     "pgw",
     "Intraclear New Acquiring",
     "pgw.intraclear.com",
@@ -227,6 +310,14 @@ const ServiceConfig SERVICE_CONFIGS[] = {
 constexpr size_t SERVICE_COUNT =
   sizeof(SERVICE_CONFIGS) / sizeof(SERVICE_CONFIGS[0]);
 
+static_assert(
+  SERVICE_COUNT <= MAX_RESOURCE_NUMBER,
+  "At most MAX_RESOURCE_NUMBER services can be monitored"
+);
+static_assert(
+  hasValidResourceNumbers(SERVICE_CONFIGS, SERVICE_COUNT),
+  "Every service needs a unique number from 1 to MAX_RESOURCE_NUMBER"
+);
 static_assert(
   WIFI_CONNECT_TIMEOUT_MS + 10000UL < LOOP_WATCHDOG_TIMEOUT_MS,
   "WiFi.begin() plus one module command would outlast the loop watchdog"

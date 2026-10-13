@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : PowerManager.h
+  * @brief          : RA4M1 Sleep mode between main loop passes.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 28.09.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef POWER_MANAGER_H
 #define POWER_MANAGER_H
 
@@ -49,6 +69,10 @@ public:
     */
   void idle(unsigned long durationMs);
 
+  /**
+    * @brief Report whether idle() sleeps.
+    * @retval (bool) The result of begin().
+    */
   bool isEnabled() const;
 
 private:

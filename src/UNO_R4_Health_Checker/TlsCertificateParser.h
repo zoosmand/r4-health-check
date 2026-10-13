@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : TlsCertificateParser.h
+  * @brief          : TLS ClientHello builder and certificate expiry parser.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef TLS_CERTIFICATE_PARSER_H
 #define TLS_CERTIFICATE_PARSER_H
 
@@ -52,6 +72,9 @@ enum class CertificateParseStatus
 class TlsCertificateParser
 {
 public:
+  /**
+    * @brief Create a parser ready for a new connection (see reset()).
+    */
   TlsCertificateParser();
 
   /**
@@ -69,6 +92,9 @@ public:
     */
   CertificateParseStatus feed(const uint8_t *data, size_t length);
 
+  /**
+    * @brief Status after the bytes fed so far.
+    */
   CertificateParseStatus status() const;
 
   /**
@@ -107,8 +133,22 @@ private:
     CAPTURE
   };
 
+  /**
+    * @brief Consume one byte of the TLS record layer: collect the record
+    *        header, then pass handshake bodies on byte by byte.
+    */
   void feedByte(uint8_t value);
+
+  /**
+    * @brief Consume one byte of a handshake message: skip messages before
+    *        Certificate, then pass the leaf certificate on.
+    */
   void feedHandshakeByte(uint8_t value);
+
+  /**
+    * @brief Consume one byte of the leaf certificate's DER encoding and walk
+    *        it down to the notAfter time.
+    */
   void feedCertificateByte(uint8_t value);
 
   /**
@@ -116,6 +156,10 @@ private:
     */
   void handleDerElement();
 
+  /**
+    * @brief Stop parsing with status FAILED.
+    * @param errorText (const char*) Static description of the failure.
+    */
   void fail(const char *errorText);
 
   CertificateParseStatus _status;

@@ -1,4 +1,22 @@
-// Host-side unit tests for src/UNO_R4_Health_Checker/BuzzerMelody.cpp. Run with test/host/run.sh.
+/**
+  ******************************************************************************
+  * @file           : buzzer_melody_test.cpp
+  * @brief          : Host tests for BuzzerMelody (test/host/run.sh).
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Host computer (C++17 unit tests)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 
 #include "../../src/UNO_R4_Health_Checker/BuzzerMelody.h"
 
@@ -27,12 +45,19 @@ static const MelodyNote MELODY[] = {
 
 static const size_t MELODY_COUNT = sizeof(MELODY) / sizeof(MELODY[0]);
 
+/**
+  * @brief Total melody length, including an empty melody.
+  */
 static void testDuration()
 {
   EXPECT(getMelodyDurationMs(MELODY, MELODY_COUNT) == 350UL);
   EXPECT(getMelodyDurationMs(nullptr, 0) == 0UL);
 }
 
+/**
+  * @brief Note and rest selection at the first and last millisecond of each
+  *        note.
+  */
 static void testNoteBoundaries()
 {
   uint16_t frequencyHz = 1;
@@ -48,6 +73,9 @@ static void testNoteBoundaries()
   EXPECT(findMelodyFrequency(MELODY, MELODY_COUNT, 349, frequencyHz) && frequencyHz == 3000);
 }
 
+/**
+  * @brief Positions past the end report silence and the end of the melody.
+  */
 static void testPastTheEnd()
 {
   uint16_t frequencyHz = 1;
@@ -57,6 +85,10 @@ static void testPastTheEnd()
   EXPECT(!findMelodyFrequency(nullptr, 0, 0, frequencyHz));
 }
 
+/**
+  * @brief Run every test and print the totals.
+  * @retval (int) 0 when every expectation held, 1 otherwise.
+  */
 int main()
 {
   testDuration();
