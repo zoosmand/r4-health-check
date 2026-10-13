@@ -102,6 +102,30 @@ static void testCompareVersions()
   EXPECT(compareVersions("0.6.0", "0.6.1") < 0);
 }
 
+static void testParseDecimalNumber()
+{
+  unsigned long value = 99;
+
+  EXPECT(parseDecimalNumber("1", 5, value) && value == 1);
+  EXPECT(parseDecimalNumber("5", 5, value) && value == 5);
+  EXPECT(parseDecimalNumber("0", 5, value) && value == 0);
+  EXPECT(parseDecimalNumber("007", 10, value) && value == 7);
+  EXPECT(parseDecimalNumber("4294967295", 4294967295UL, value) &&
+         value == 4294967295UL);
+
+  value = 99;
+  EXPECT(!parseDecimalNumber("6", 5, value));
+  EXPECT(!parseDecimalNumber("", 5, value));
+  EXPECT(!parseDecimalNumber("-1", 5, value));
+  EXPECT(!parseDecimalNumber("+1", 5, value));
+  EXPECT(!parseDecimalNumber(" 1", 5, value));
+  EXPECT(!parseDecimalNumber("1/", 5, value));
+  EXPECT(!parseDecimalNumber("1a", 5, value));
+  EXPECT(!parseDecimalNumber("4294967296", 4294967295UL, value));
+  EXPECT(!parseDecimalNumber("99999999999999999999", 4294967295UL, value));
+  EXPECT(value == 99);
+}
+
 static void testEscapeJsonChar()
 {
   char out[7];
@@ -122,6 +146,7 @@ int main()
   testConstantTimeEquals();
   testCompareVersions();
   testEscapeJsonChar();
+  testParseDecimalNumber();
 
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

@@ -12,6 +12,9 @@
   Minimal JSON HTTP API. Serves one client per update() call; each request
   is bounded in size (AppConfig.h API_MAX_*) and in time
   (API_CLIENT_TIMEOUT_MS). The API is not served while a health check runs.
+
+  Every endpoint is served under /api/v<API_VERSION>/ (see ApiVersion.h).
+  Requests for another version are answered with 404.
 */
 class ApiServer
 {
@@ -33,7 +36,7 @@ public:
 
   /**
     * @brief Start listening.
-    * @param lastResetByWatchdog (bool) Reported by GET /api/status.
+    * @param lastResetByWatchdog (bool) Reported by GET /api/v<N>/status.
     */
   void begin(bool lastResetByWatchdog);
 
@@ -61,6 +64,23 @@ private:
     bool authorized
   );
 
+  /**
+    * @brief Handle POST <prefix> and POST <prefix>/{number}, which play an
+    *        alert test once.
+    * @param route (const char*) Request path after the version prefix.
+    * @param prefix (const char*) Route of the alert, such as "/buzzer/alert".
+    * @param alert (AlertTest) Alert to play.
+    * @param isPost (bool) Whether the request method is POST.
+    * @retval (bool) False when route does not belong to this alert.
+    */
+  bool routeAlertTest(
+    WiFiClient &client,
+    const char *route,
+    const char *prefix,
+    AlertTest alert,
+    bool isPost
+  );
+
   void sendOverview(WiFiClient &client);
   void sendServices(WiFiClient &client);
   void sendService(WiFiClient &client, size_t index);
@@ -85,6 +105,9 @@ private:
 
   WiFiServer _server;
   const char *_apiToken;
+
+  // "/api/v<API_VERSION>", without a trailing slash.
+  char _apiPrefix[16];
   bool _lastResetByWatchdog;
 
   NetworkManager &_networkManager;

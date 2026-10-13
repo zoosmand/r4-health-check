@@ -1,4 +1,5 @@
 #include "ApiServer.h"
+#include "ApiVersion.h"
 #include "AppConfig.h"
 #include "HttpLineReader.h"
 #include "TextParsing.h"
@@ -7,7 +8,10 @@
 namespace
 {
 constexpr size_t METHOD_CAPACITY = 8;
-constexpr char SERVICES_PREFIX[] = "/api/services/";
+constexpr char API_ROOT[] = "/api/";
+constexpr char SERVICES_PREFIX[] = "/services/";
+constexpr char SERVICE_ALERT_ROUTE[] = "/buzzer/alert";
+constexpr char CERTIFICATE_ALERT_ROUTE[] = "/buzzer/crtexp";
 constexpr char CHECK_SUFFIX[] = "/check";
 constexpr size_t ISO_TIME_CAPACITY = 24;
 
@@ -34,6 +38,7 @@ ApiServer::ApiServer(
     _alarmController(alarmController),
     _watchdog(watchdog)
 {
+  snprintf(_apiPrefix, sizeof(_apiPrefix), "/api/v%u", API_VERSION);
 }
 
 void ApiServer::begin(bool lastResetByWatchdog)
@@ -41,7 +46,9 @@ void ApiServer::begin(bool lastResetByWatchdog)
   _lastResetByWatchdog = lastResetByWatchdog;
 
   _server.begin();
-  Serial.println(F("API server started."));
+  Serial.print(F("API server started, version "));
+  Serial.print(API_VERSION);
+  Serial.println(F("."));
 
   if (_apiToken[0] == '\0')
   {
@@ -71,16 +78,19 @@ void ApiServer::onNetworkReady()
 
 void ApiServer::printEndpoints() const
 {
+  // Paths below the version prefix.
   static const char *const ENDPOINTS[] = {
-    "GET  /api/status",
-    "GET  /api/services",
-    "GET  /api/services/{id}",
-    "POST /api/check",
-    "POST /api/services/{id}/check",
-    "POST /api/buzzer/test",
-    "POST /api/buzzer/melody",
-    "POST /api/buzzer/silence",
-    "POST /api/buzzer/unsilence"
+    "GET  /status",
+    "GET  /services",
+    "GET  /services/{id}",
+    "POST /check",
+    "POST /services/{id}/check",
+    "POST /buzzer/alert",
+    "POST /buzzer/alert/{number}",
+    "POST /buzzer/crtexp",
+    "POST /buzzer/crtexp/{number}",
+    "POST /buzzer/silence",
+    "POST /buzzer/unsilence"
   };
 
   const IPAddress ip = _networkManager.localIp();
@@ -89,13 +99,14 @@ void ApiServer::printEndpoints() const
 
   for (const char *endpoint : ENDPOINTS)
   {
-    // "METHOD /path" -> "  METHOD http://<ip>/path"
+    // "METHOD /path" -> "  METHOD http://<ip>/api/v<N>/path"
     const char *path = strchr(endpoint, '/');
 
     Serial.print(F("  "));
     Serial.write(endpoint, static_cast<size_t>(path - endpoint));
     Serial.print(F("http://"));
     Serial.print(ip);
+    Serial.print(_apiPrefix);
     Serial.println(path);
   }
 }
@@ -228,7 +239,28 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/status") == 0)
+  // Strip "/api/v<N>"; everything below is routed relative to it.
+  const size_t apiPrefixLength = strlen(_apiPrefix);
+
+  if (strncmp(path, _apiPrefix, apiPrefixLength) != 0 ||
+      path[apiPrefixLength] != '/')
+  {
+    if (strncmp(path, API_ROOT, sizeof(API_ROOT) - 1) == 0)
+    {
+      String message = "Unsupported API version; use ";
+      message += _apiPrefix;
+      message += "/";
+      sendError(client, 404, "Not Found", message.c_str());
+      return;
+    }
+
+    sendError(client, 404, "Not Found", "API endpoint not found");
+    return;
+  }
+
+  const char *route = path + apiPrefixLength;
+
+  if (strcmp(route, "/status") == 0)
   {
     if (!isGet)
     {
@@ -240,7 +272,7 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/services") == 0)
+  if (strcmp(route, "/services") == 0)
   {
     if (!isGet)
     {
@@ -252,7 +284,7 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/check") == 0)
+  if (strcmp(route, "/check") == 0)
   {
     if (!isPost)
     {
@@ -271,33 +303,13 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/buzzer/test") == 0)
+  if (routeAlertTest(client, route, SERVICE_ALERT_ROUTE, AlertTest::SERVICE, isPost) ||
+      routeAlertTest(client, route, CERTIFICATE_ALERT_ROUTE, AlertTest::CERTIFICATE, isPost))
   {
-    if (!isPost)
-    {
-      sendError(client, 405, "Method Not Allowed", "Use POST");
-      return;
-    }
-
-    _alarmController.startTest();
-    sendJson(client, 200, "OK", "{\"result\":\"Buzzer test started\"}");
     return;
   }
 
-  if (strcmp(path, "/api/buzzer/melody") == 0)
-  {
-    if (!isPost)
-    {
-      sendError(client, 405, "Method Not Allowed", "Use POST");
-      return;
-    }
-
-    _alarmController.startMelodyTest();
-    sendJson(client, 200, "OK", "{\"result\":\"Melody test started\"}");
-    return;
-  }
-
-  if (strcmp(path, "/api/buzzer/silence") == 0)
+  if (strcmp(route, "/buzzer/silence") == 0)
   {
     if (!isPost)
     {
@@ -310,7 +322,7 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/buzzer/unsilence") == 0)
+  if (strcmp(route, "/buzzer/unsilence") == 0)
   {
     if (!isPost)
     {
@@ -325,10 +337,10 @@ void ApiServer::routeRequest(
 
   const size_t prefixLength = sizeof(SERVICES_PREFIX) - 1;
 
-  if (strncmp(path, SERVICES_PREFIX, prefixLength) == 0)
+  if (strncmp(route, SERVICES_PREFIX, prefixLength) == 0)
   {
     char serviceId[API_MAX_REQUEST_LINE_LENGTH + 1];
-    strncpy(serviceId, path + prefixLength, sizeof(serviceId) - 1);
+    strncpy(serviceId, route + prefixLength, sizeof(serviceId) - 1);
     serviceId[sizeof(serviceId) - 1] = '\0';
 
     const size_t suffixLength = sizeof(CHECK_SUFFIX) - 1;
@@ -392,6 +404,58 @@ void ApiServer::routeRequest(
   sendError(client, 404, "Not Found", "API endpoint not found");
 }
 
+bool ApiServer::routeAlertTest(
+  WiFiClient &client,
+  const char *route,
+  const char *prefix,
+  AlertTest alert,
+  bool isPost
+)
+{
+  const size_t prefixLength = strlen(prefix);
+
+  if (strncmp(route, prefix, prefixLength) != 0)
+  {
+    return false;
+  }
+
+  const char *rest = route + prefixLength;
+  unsigned long number = 0;
+
+  if (*rest == '/')
+  {
+    if (!parseDecimalNumber(rest + 1, MAX_RESOURCE_NUMBER, number) || number == 0)
+    {
+      String message = "Device number must be from 1 to ";
+      message += String(MAX_RESOURCE_NUMBER);
+      sendError(client, 400, "Bad Request", message.c_str());
+      return true;
+    }
+  }
+  else if (*rest != '\0')
+  {
+    // A longer route such as "/buzzer/alerts".
+    return false;
+  }
+
+  if (!isPost)
+  {
+    sendError(client, 405, "Method Not Allowed", "Use POST");
+    return true;
+  }
+
+  _alarmController.startAlertTest(alert, getResourceBit(static_cast<uint8_t>(number)));
+
+  String json = "{\"result\":\"Alert test started\",\"alert\":\"";
+  json += alert == AlertTest::SERVICE ? "sos" : "certificate";
+  json += "\",\"device\":";
+  json += number == 0 ? String("null") : String(number);
+  json += "}";
+
+  sendJson(client, 200, "OK", json);
+  return true;
+}
+
 void ApiServer::sendOverview(WiFiClient &client)
 {
   String json;
@@ -399,6 +463,10 @@ void ApiServer::sendOverview(WiFiClient &client)
 
   json += "{";
   json += "\"device\":\"UNO R4 WiFi Multi-Service Health Checker\",";
+
+  json += "\"api_version\":";
+  json += String(API_VERSION);
+  json += ",";
 
   json += "\"wifi_connected\":";
   json += boolJson(_networkManager.isConnected());
@@ -468,8 +536,8 @@ void ApiServer::sendOverview(WiFiClient &client)
   json += boolJson(_alarmController.isTestActive());
   json += ",";
 
-  json += "\"melody_test_active\":";
-  json += boolJson(_alarmController.isMelodyTestActive());
+  json += "\"alert_test_active\":";
+  json += boolJson(_alarmController.isAlertTestActive());
   json += ",";
 
   json += "\"watchdog_timeout_ms\":";

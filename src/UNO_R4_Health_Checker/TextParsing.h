@@ -76,4 +76,15 @@ int compareVersions(const char *left, const char *right);
   */
 size_t escapeJsonChar(char c, char *out);
 
+/**
+  * @brief Parse a whole string as an unsigned decimal number, for example a
+  *        path segment. Signs, spaces, and other characters are rejected.
+  * @param text (const char*) Non-null text; must consist of digits only.
+  * @param maxValue (unsigned long) Largest accepted value.
+  * @param value (unsigned long&) Receives the number on success.
+  * @retval (bool) False when text is empty, contains a non-digit, or exceeds
+  *         maxValue.
+  */
+bool parseDecimalNumber(const char *text, unsigned long maxValue, unsigned long &value);
+
 #endif

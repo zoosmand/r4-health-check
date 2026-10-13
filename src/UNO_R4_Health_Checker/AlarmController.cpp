@@ -25,9 +25,11 @@ AlarmController::AlarmController(uint8_t pin, uint16_t toneHz)
     _testActive(false),
     _hardwareFault(false),
     _expiringResources(0),
-    _melodyTestActive(false),
+    _alertTestActive(false),
+    _alertTestCertificate(false),
+    _alertTestMask(0),
     _testStartedAtMs(0),
-    _melodyTestStartedAtMs(0)
+    _alertTestStartedAtMs(0)
 {
 }
 
@@ -171,16 +173,21 @@ bool AlarmController::isTestActive() const
   return _testActive;
 }
 
-void AlarmController::startMelodyTest()
+void AlarmController::startAlertTest(AlertTest alert, uint8_t resourceMask)
 {
-  // Publish the start time before the flag the interrupt checks first.
-  _melodyTestStartedAtMs = millis();
-  _melodyTestActive = true;
+  // The interrupt reads the parameters only while the flag is set, and it
+  // cannot be interrupted by this code. Clearing the flag first means it
+  // never sees a mix of old and new parameters.
+  _alertTestActive = false;
+  _alertTestCertificate = alert == AlertTest::CERTIFICATE;
+  _alertTestMask = resourceMask;
+  _alertTestStartedAtMs = millis();
+  _alertTestActive = true;
 }
 
-bool AlarmController::isMelodyTestActive() const
+bool AlarmController::isAlertTestActive() const
 {
-  return _melodyTestActive;
+  return _alertTestActive;
 }
 
 void AlarmController::setHardwareFaultPattern()
@@ -226,14 +233,17 @@ void AlarmController::tick()
     _testActive = false;
   }
 
-  if (_melodyTestActive)
+  if (_alertTestActive)
   {
+    const ResourceAlertPattern &pattern =
+      _alertTestCertificate ? CERTIFICATE_ALERT_PATTERN : SERVICE_ALERT_PATTERN;
+
     uint16_t testHz = 0;
 
-    if (findMelodyFrequency(
-          CERTIFICATE_WARNING_MELODY,
-          CERTIFICATE_WARNING_MELODY_NOTE_COUNT,
-          now - _melodyTestStartedAtMs,
+    if (findResourceAlertFrequency(
+          pattern,
+          _alertTestMask,
+          now - _alertTestStartedAtMs,
           testHz
         ))
     {
@@ -241,7 +251,7 @@ void AlarmController::tick()
       return;
     }
 
-    _melodyTestActive = false;
+    _alertTestActive = false;
   }
 
   if (_silenced)

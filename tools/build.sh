@@ -15,6 +15,9 @@
 #   ARDUINO_CLI   arduino-cli executable (default: arduino-cli from PATH)
 #   FQBN          board (default: arduino:renesas_uno:unor4wifi)
 #
+# Before compiling, ApiVersion.h is regenerated from .version (see
+# tools/generate_api_version.sh).
+#
 # When src/UNO_R4_Health_Checker/arduino_secrets.h is missing (for example
 # in CI), the sketch is copied to build/ and compiled with the example
 # credentials; the source tree is not modified.
@@ -38,6 +41,9 @@ done
 shift $((OPTIND - 1))
 
 mkdir -p "$OUTPUT"
+
+# The API version lives in .version, which the Arduino build cannot read.
+"$ROOT/tools/generate_api_version.sh"
 
 if [[ ! -f "$SKETCH/arduino_secrets.h" ]]; then
   echo "warning: $SKETCH_NAME/arduino_secrets.h not found; building a copy with the example credentials" >&2

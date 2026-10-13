@@ -6,6 +6,15 @@
 #include <pwm.h>
 #include "ResourceAlert.h"
 
+/**
+  * @brief Alert played by AlarmController::startAlertTest().
+  */
+enum class AlertTest
+{
+  SERVICE,      // SOS signal, as for a failing service
+  CERTIFICATE   // Certificate warning melody
+};
+
 /*
   Passive buzzer driver.
 
@@ -24,7 +33,7 @@
   alarm flags and resource masks and may clear the test flags; every shared
   value is a single volatile word, so no locking is needed.
 
-  Pattern priority: hardware fault > buzzer test > melody test > silenced >
+  Pattern priority: hardware fault > buzzer test > alert test > silenced >
   service alarm > network alarm > certificate warning.
 
   The service alarm and the certificate warning keep their schedules while a
@@ -109,17 +118,22 @@ public:
   bool isSilenced() const;
 
   /**
-    * @brief Sound the buzzer continuously for BUZZER_TEST_DURATION_MS.
+    * @brief Sound the buzzer continuously for BUZZER_TEST_DURATION_MS. Used
+    *        as the self-test beep at boot.
     */
   void startTest();
   bool isTestActive() const;
 
   /**
-    * @brief Play CERTIFICATE_WARNING_MELODY once, even while silenced.
-    *        Restarts the melody when it is already playing.
+    * @brief Play an alert once, even while silenced: the SOS signal or the
+    *        certificate warning melody, followed by the counted beeps of the
+    *        given resources. Restarts an alert test that is already playing.
+    * @param alert (AlertTest) Signal to play.
+    * @param resourceMask (uint8_t) Resources to count, bit (n - 1) for
+    *        resource n; 0 plays the signal only.
     */
-  void startMelodyTest();
-  bool isMelodyTestActive() const;
+  void startAlertTest(AlertTest alert, uint8_t resourceMask);
+  bool isAlertTestActive() const;
 
   /**
     * @brief Switch permanently to the fast hardware-fault pattern.
@@ -171,9 +185,11 @@ private:
   volatile bool _testActive;
   volatile bool _hardwareFault;
   volatile uint8_t _expiringResources;
-  volatile bool _melodyTestActive;
+  volatile bool _alertTestActive;
+  volatile bool _alertTestCertificate;
+  volatile uint8_t _alertTestMask;
   volatile unsigned long _testStartedAtMs;
-  volatile unsigned long _melodyTestStartedAtMs;
+  volatile unsigned long _alertTestStartedAtMs;
 };
 
 #endif
