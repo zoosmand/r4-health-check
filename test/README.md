@@ -1,0 +1,105 @@
+# TESTS
+
+## Host-side unit tests
+
+`test/host/` contains unit tests for the Arduino-independent helpers in
+`src/UNO_R4_Health_Checker/TextParsing.cpp`: HTTP status and request-line parsing, header matching,
+token comparison, version comparison, and JSON escaping. It also covers the
+heartbeat LED timing in `src/UNO_R4_Health_Checker/HeartbeatPattern.cpp`, the UTC date
+handling in `UtcTime.cpp` (HTTP Date, X.509 times, ISO formatting, days
+left), the TLS ClientHello builder and certificate parser in
+`TlsCertificateParser.cpp`, the melody lookup in `BuzzerMelody.cpp`, and the
+resource alert layout and schedule in `ResourceAlert.cpp`.
+
+The certificate parser tests use two self-signed public test certificates in
+`test/host/certificate_fixtures.h` (an X.509 v1 one with a UTCTime expiry and
+a v3 one with a GeneralizedTime expiry), wrapped in TLS records fragmented in
+every tested way.
+
+    test/host/run.sh
+
+The script builds the tests with the system C++ compiler, using
+AddressSanitizer and UndefinedBehaviorSanitizer, and exits non-zero on any
+failure.
+
+## Firmware build check
+
+    tools/build.sh
+
+Compiles the firmware with arduino-cli and all warnings enabled.
+
+## API tests (Postman)
+
+`UNO_R4_Multi_Service_Health_Checker.postman_collection.json` covers every API
+endpoint. It defines no variables of its own; they come from the environment
+in `UNO_R4_Health_Checker.postman_environment.json`. Import both files,
+select the "UNO R4 Health Checker" environment, and set:
+
+- `baseUrl`: device address, for example `http://192.168.1.50`
+- `apiVersion`: the API version in `src/UNO_R4_Health_Checker/.version`,
+  for example `1`; `Get Device Status` checks that it matches the device
+- `serviceId`: an id from `SERVICE_CONFIGS`, for example `acquiring`
+- `deviceNumber`: a device number from 1 to 5 for the buzzer alert tests
+- `apiToken`: the value of `SECRET_API_TOKEN`, or empty when it is not set
+
+`apiToken` is a secret variable. Enter the token in Postman only: keep it
+empty in the committed environment file, and do not export the environment
+back into the repository with a token in it.
+
+## Target-device checks
+
+Run these by hand after changes that affect hardware behavior:
+
+1. Buzzer test: the buzzer beeps for 500 ms at every boot.
+   `POST /api/v1/buzzer/alert` plays the SOS once (about 3.2 s), and
+   `POST /api/v1/buzzer/alert/3` plays it followed by a 1 s pause and three
+   short beeps. `POST /api/v1/buzzer/crtexp` and
+   `POST /api/v1/buzzer/crtexp/3` do the same with the certificate warning
+   melody. All four also sound while the buzzer is silenced.
+   `POST /api/v1/buzzer/alert/6` is answered with `400`.
+2. Service alarm: point one service (for example number 2) at a path that
+   answers with a non-200 status. After two checks (about 15 s apart) the
+   log prints `Service failing: #2 ...`, the buzzer plays SOS, a 1 s pause,
+   and two short beeps, and `failing_service_count` is 1. The alarm repeats
+   every minute.
+3. Silence and re-arm: silence the alarm, then make a second service fail.
+   The buzzer sounds again right after any alarm in progress, and names both
+   resources in ascending order, each group after a 1 s pause.
+4. LED matrix: while a service is failing, the matrix shows the caution
+   triangle, including while the buzzer is silenced. It turns off after the
+   service recovers.
+5. Network alarm: switch off the access point. After 60 s the long-beep
+   pattern sounds. It stops after Wi-Fi reconnects.
+6. Watchdog: temporarily add an endless loop without a watchdog refresh to
+   `loop()`. The board resets within about 36 s and logs
+   `WARNING: restarted by the watchdog.` `GET /api/v1/status` then reports
+   `"last_reset_by_watchdog":true`.
+7. Heartbeat: while Wi-Fi is connected, the top-left LED of the matrix beats
+   with a double pulse once per second, also while the caution sign is
+   shown. It is steady on while a health check runs (the serial log prints
+   `Checking [...]`) and beats again when the check ends. It goes dark when
+   Wi-Fi is lost and resumes after reconnecting.
+8. Wi-Fi outage restart: switch off the access point. After 5 min the log
+   prints `Network not ready for 300 s; restarting through the watchdog.`,
+   the board resets within about 6 s, and logs
+   `WARNING: restarted by the watchdog.` after boot.
+9. Certificate expiry: the serial log prints `Reading certificate [...]`
+   and `Certificate expires <date>, <n> days left` for every enabled service
+   after its first health check. `GET /api/v1/services` reports
+   `certificate_not_after` and `certificate_days_left`. To hear the warning,
+   temporarily raise `CERTIFICATE_WARNING_DAYS` above the days left of one
+   service, or use `POST /api/v1/buzzer/crtexp` to hear the melody only. With
+   the raised threshold, the melody plays once the certificate has been
+   read, followed by a 1 s pause and the resource's number in short beeps,
+   and `GET /api/v1/status` reports `"certificate_warning_active":true`.
+   `POST /api/v1/buzzer/silence` mutes it; a failing service's alarm pattern
+   takes precedence over it. While a service is failing, the log shows no
+   `Reading certificate [...]` line for that service, while the other
+   services' certificates are still read; its pending read runs after it
+   recovers.
+10. Idle sleep: the boot log shows no `idle sleep disabled` warning. The
+   serial log, buzzer patterns, API, and LED matrix behave as before. The
+   board's supply current is slightly lower than on a build without the
+   `powerManager.idle()` call.
+
+&copy; 2017-2026, Dmitry Slobodchikov

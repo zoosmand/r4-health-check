@@ -1,14 +1,44 @@
+/**
+  ******************************************************************************
+  * @file           : ApiServer.cpp
+  * @brief          : JSON HTTP API, versioned under /api/v<N>/.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "ApiServer.h"
+#include "ApiVersion.h"
 #include "AppConfig.h"
 #include "HttpLineReader.h"
 #include "TextParsing.h"
+#include "UtcTime.h"
 
 namespace
 {
 constexpr size_t METHOD_CAPACITY = 8;
-constexpr char SERVICES_PREFIX[] = "/api/services/";
+constexpr char API_ROOT[] = "/api/";
+constexpr char SERVICES_PREFIX[] = "/services/";
+constexpr char SERVICE_ALERT_ROUTE[] = "/buzzer/alert";
+constexpr char CERTIFICATE_ALERT_ROUTE[] = "/buzzer/crtexp";
 constexpr char CHECK_SUFFIX[] = "/check";
+constexpr size_t ISO_TIME_CAPACITY = 24;
 
+/**
+  * @brief Time left of a budget that started at startedAt.
+  * @retval (unsigned long) Remaining milliseconds, or 0 when expired.
+  */
 unsigned long remainingMs(unsigned long startedAt, unsigned long budgetMs)
 {
   const unsigned long elapsed = millis() - startedAt;
@@ -32,6 +62,7 @@ ApiServer::ApiServer(
     _alarmController(alarmController),
     _watchdog(watchdog)
 {
+  snprintf(_apiPrefix, sizeof(_apiPrefix), "/api/v%u", API_VERSION);
 }
 
 void ApiServer::begin(bool lastResetByWatchdog)
@@ -39,7 +70,9 @@ void ApiServer::begin(bool lastResetByWatchdog)
   _lastResetByWatchdog = lastResetByWatchdog;
 
   _server.begin();
-  Serial.println(F("API server started."));
+  Serial.print(F("API server started, version "));
+  Serial.print(API_VERSION);
+  Serial.println(F("."));
 
   if (_apiToken[0] == '\0')
   {
@@ -69,15 +102,19 @@ void ApiServer::onNetworkReady()
 
 void ApiServer::printEndpoints() const
 {
+  // Paths below the version prefix.
   static const char *const ENDPOINTS[] = {
-    "GET  /api/status",
-    "GET  /api/services",
-    "GET  /api/services/{id}",
-    "POST /api/check",
-    "POST /api/services/{id}/check",
-    "POST /api/buzzer/test",
-    "POST /api/buzzer/silence",
-    "POST /api/buzzer/unsilence"
+    "GET  /status",
+    "GET  /services",
+    "GET  /services/{id}",
+    "POST /check",
+    "POST /services/{id}/check",
+    "POST /buzzer/alert",
+    "POST /buzzer/alert/{number}",
+    "POST /buzzer/crtexp",
+    "POST /buzzer/crtexp/{number}",
+    "POST /buzzer/silence",
+    "POST /buzzer/unsilence"
   };
 
   const IPAddress ip = _networkManager.localIp();
@@ -86,13 +123,14 @@ void ApiServer::printEndpoints() const
 
   for (const char *endpoint : ENDPOINTS)
   {
-    // "METHOD /path" -> "  METHOD http://<ip>/path"
+    // "METHOD /path" -> "  METHOD http://<ip>/api/v<N>/path"
     const char *path = strchr(endpoint, '/');
 
     Serial.print(F("  "));
     Serial.write(endpoint, static_cast<size_t>(path - endpoint));
     Serial.print(F("http://"));
     Serial.print(ip);
+    Serial.print(_apiPrefix);
     Serial.println(path);
   }
 }
@@ -225,7 +263,28 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/status") == 0)
+  // Strip "/api/v<N>"; everything below is routed relative to it.
+  const size_t apiPrefixLength = strlen(_apiPrefix);
+
+  if (strncmp(path, _apiPrefix, apiPrefixLength) != 0 ||
+      path[apiPrefixLength] != '/')
+  {
+    if (strncmp(path, API_ROOT, sizeof(API_ROOT) - 1) == 0)
+    {
+      String message = "Unsupported API version; use ";
+      message += _apiPrefix;
+      message += "/";
+      sendError(client, 404, "Not Found", message.c_str());
+      return;
+    }
+
+    sendError(client, 404, "Not Found", "API endpoint not found");
+    return;
+  }
+
+  const char *route = path + apiPrefixLength;
+
+  if (strcmp(route, "/status") == 0)
   {
     if (!isGet)
     {
@@ -237,7 +296,7 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/services") == 0)
+  if (strcmp(route, "/services") == 0)
   {
     if (!isGet)
     {
@@ -249,7 +308,7 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/check") == 0)
+  if (strcmp(route, "/check") == 0)
   {
     if (!isPost)
     {
@@ -268,20 +327,13 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/buzzer/test") == 0)
+  if (routeAlertTest(client, route, SERVICE_ALERT_ROUTE, AlertTest::SERVICE, isPost) ||
+      routeAlertTest(client, route, CERTIFICATE_ALERT_ROUTE, AlertTest::CERTIFICATE, isPost))
   {
-    if (!isPost)
-    {
-      sendError(client, 405, "Method Not Allowed", "Use POST");
-      return;
-    }
-
-    _alarmController.startTest();
-    sendJson(client, 200, "OK", "{\"result\":\"Buzzer test started\"}");
     return;
   }
 
-  if (strcmp(path, "/api/buzzer/silence") == 0)
+  if (strcmp(route, "/buzzer/silence") == 0)
   {
     if (!isPost)
     {
@@ -294,7 +346,7 @@ void ApiServer::routeRequest(
     return;
   }
 
-  if (strcmp(path, "/api/buzzer/unsilence") == 0)
+  if (strcmp(route, "/buzzer/unsilence") == 0)
   {
     if (!isPost)
     {
@@ -309,10 +361,10 @@ void ApiServer::routeRequest(
 
   const size_t prefixLength = sizeof(SERVICES_PREFIX) - 1;
 
-  if (strncmp(path, SERVICES_PREFIX, prefixLength) == 0)
+  if (strncmp(route, SERVICES_PREFIX, prefixLength) == 0)
   {
     char serviceId[API_MAX_REQUEST_LINE_LENGTH + 1];
-    strncpy(serviceId, path + prefixLength, sizeof(serviceId) - 1);
+    strncpy(serviceId, route + prefixLength, sizeof(serviceId) - 1);
     serviceId[sizeof(serviceId) - 1] = '\0';
 
     const size_t suffixLength = sizeof(CHECK_SUFFIX) - 1;
@@ -376,13 +428,69 @@ void ApiServer::routeRequest(
   sendError(client, 404, "Not Found", "API endpoint not found");
 }
 
+bool ApiServer::routeAlertTest(
+  WiFiClient &client,
+  const char *route,
+  const char *prefix,
+  AlertTest alert,
+  bool isPost
+)
+{
+  const size_t prefixLength = strlen(prefix);
+
+  if (strncmp(route, prefix, prefixLength) != 0)
+  {
+    return false;
+  }
+
+  const char *rest = route + prefixLength;
+  unsigned long number = 0;
+
+  if (*rest == '/')
+  {
+    if (!parseDecimalNumber(rest + 1, MAX_RESOURCE_NUMBER, number) || number == 0)
+    {
+      String message = "Device number must be from 1 to ";
+      message += String(MAX_RESOURCE_NUMBER);
+      sendError(client, 400, "Bad Request", message.c_str());
+      return true;
+    }
+  }
+  else if (*rest != '\0')
+  {
+    // A longer route such as "/buzzer/alerts".
+    return false;
+  }
+
+  if (!isPost)
+  {
+    sendError(client, 405, "Method Not Allowed", "Use POST");
+    return true;
+  }
+
+  _alarmController.startAlertTest(alert, getResourceBit(static_cast<uint8_t>(number)));
+
+  String json = "{\"result\":\"Alert test started\",\"alert\":\"";
+  json += alert == AlertTest::SERVICE ? "sos" : "certificate";
+  json += "\",\"device\":";
+  json += number == 0 ? String("null") : String(number);
+  json += "}";
+
+  sendJson(client, 200, "OK", json);
+  return true;
+}
+
 void ApiServer::sendOverview(WiFiClient &client)
 {
   String json;
-  json.reserve(640);
+  json.reserve(800);
 
   json += "{";
   json += "\"device\":\"UNO R4 WiFi Multi-Service Health Checker\",";
+
+  json += "\"api_version\":";
+  json += String(API_VERSION);
+  json += ",";
 
   json += "\"wifi_connected\":";
   json += boolJson(_networkManager.isConnected());
@@ -424,12 +532,36 @@ void ApiServer::sendOverview(WiFiClient &client)
   json += boolJson(_alarmController.isNetworkAlarmActive());
   json += ",";
 
+  json += "\"certificate_warning_active\":";
+  json += boolJson(_alarmController.isCertificateWarningActive());
+  json += ",";
+
+  json += "\"expiring_certificate_count\":";
+  json += String(_healthChecker.expiringCertificateCount());
+  json += ",";
+
+  // Empty until a health-check response has carried an HTTP Date header.
+  char utcTime[ISO_TIME_CAPACITY] = "";
+
+  if (_healthChecker.clock().isSet())
+  {
+    formatIsoUtc(_healthChecker.clock().nowUnixSeconds(), utcTime, sizeof(utcTime));
+  }
+
+  json += "\"utc_time\":\"";
+  json += utcTime;
+  json += "\",";
+
   json += "\"buzzer_silenced\":";
   json += boolJson(_alarmController.isSilenced());
   json += ",";
 
   json += "\"buzzer_test_active\":";
   json += boolJson(_alarmController.isTestActive());
+  json += ",";
+
+  json += "\"alert_test_active\":";
+  json += boolJson(_alarmController.isAlertTestActive());
   json += ",";
 
   json += "\"watchdog_timeout_ms\":";
@@ -455,7 +587,7 @@ void ApiServer::sendOverview(WiFiClient &client)
 void ApiServer::sendServices(WiFiClient &client)
 {
   String json;
-  json.reserve(16 + _healthChecker.serviceCount() * 560);
+  json.reserve(16 + _healthChecker.serviceCount() * 760);
 
   json += "{\"services\":[";
 
@@ -485,9 +617,13 @@ String ApiServer::buildServiceJson(size_t index) const
   const ServiceState &state = _healthChecker.stateAt(index);
 
   String json;
-  json.reserve(560);
+  json.reserve(760);
 
   json += "{";
+
+  json += "\"number\":";
+  json += String(config.number);
+  json += ",";
 
   json += "\"id\":\"";
   json += escapeJson(config.id);
@@ -568,6 +704,46 @@ String ApiServer::buildServiceJson(size_t index) const
 
   json += "\"consecutive_failures\":";
   json += String(state.consecutiveFailures);
+  json += ",";
+
+  char notAfter[ISO_TIME_CAPACITY] = "";
+
+  if (state.certificateKnown)
+  {
+    formatIsoUtc(state.certificateNotAfterUnixSeconds, notAfter, sizeof(notAfter));
+  }
+
+  json += "\"certificate_not_after\":\"";
+  json += notAfter;
+  json += "\",";
+
+  // null while the expiry or the current time is unknown.
+  json += "\"certificate_days_left\":";
+
+  if (state.certificateKnown && _healthChecker.clock().isSet())
+  {
+    json += String(daysUntil(
+      state.certificateNotAfterUnixSeconds,
+      _healthChecker.clock().nowUnixSeconds()
+    ));
+  }
+  else
+  {
+    json += "null";
+  }
+
+  json += ",";
+
+  json += "\"certificate_expiring\":";
+  json += boolJson(state.certificateExpiring);
+  json += ",";
+
+  json += "\"certificate_error\":\"";
+  json += escapeJson(state.certificateError);
+  json += "\",";
+
+  json += "\"next_certificate_check_at_ms\":";
+  json += String(state.nextCertificateCheckAtMs);
 
   json += "}";
 

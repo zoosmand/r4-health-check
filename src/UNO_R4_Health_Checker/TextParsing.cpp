@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : TextParsing.cpp
+  * @brief          : Arduino-independent HTTP, JSON, and number parsing.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 27.09.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "TextParsing.h"
 
 #include <string.h>
@@ -228,4 +248,35 @@ size_t escapeJsonChar(char c, char *out)
   out[0] = c;
   out[1] = '\0';
   return 1;
+}
+
+bool parseDecimalNumber(const char *text, unsigned long maxValue, unsigned long &value)
+{
+  if (text[0] == '\0')
+  {
+    return false;
+  }
+
+  unsigned long result = 0;
+
+  for (const char *p = text; *p != '\0'; p++)
+  {
+    if (*p < '0' || *p > '9')
+    {
+      return false;
+    }
+
+    const unsigned long digit = static_cast<unsigned long>(*p - '0');
+
+    // Checked before multiplying, so the value never overflows.
+    if (digit > maxValue || result > (maxValue - digit) / 10UL)
+    {
+      return false;
+    }
+
+    result = result * 10UL + digit;
+  }
+
+  value = result;
+  return true;
 }

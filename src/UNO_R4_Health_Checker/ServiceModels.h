@@ -1,10 +1,33 @@
+/**
+  ******************************************************************************
+  * @file           : ServiceModels.h
+  * @brief          : Service configuration and runtime-state structures.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef SERVICE_MODELS_H
 #define SERVICE_MODELS_H
 
 #include <Arduino.h>
+#include "ResourceAlert.h"
 
 /**
   * @brief Static description of one monitored HTTPS resource.
+  * @param number (uint8_t) Unique resource number from 1 to
+  *        MAX_RESOURCE_NUMBER; the buzzer beeps it to name the resource.
   * @param id (const char*) Unique, URL-safe identifier used by the API.
   * @param name (const char*) Human-readable name.
   * @param host (const char*) DNS host name without scheme; also used for SNI.
@@ -16,6 +39,7 @@
   */
 struct ServiceConfig
 {
+  uint8_t number;
   const char *id;
   const char *name;
   const char *host;
@@ -27,6 +51,31 @@ struct ServiceConfig
 
   bool enabled;
 };
+
+/**
+  * @brief Check that every resource number is in range and unique.
+  * @param configs (const ServiceConfig*) Service table.
+  * @param count (size_t) Number of entries in configs.
+  * @retval (bool) True when the numbers are valid. Meant for static_assert.
+  */
+constexpr bool hasValidResourceNumbers(const ServiceConfig *configs, size_t count)
+{
+  uint8_t seen = 0;
+
+  for (size_t i = 0; i < count; i++)
+  {
+    const uint8_t bit = getResourceBit(configs[i].number);
+
+    if (bit == 0 || (seen & bit) != 0)
+    {
+      return false;
+    }
+
+    seen = static_cast<uint8_t>(seen | bit);
+  }
+
+  return true;
+}
 
 /**
   * @brief Runtime state of one service. All times are millis() values.
@@ -47,6 +96,17 @@ struct ServiceConfig
   *        healthy one.
   * @param lastError (const char*) Static description of the last failure, or
   *        an empty string.
+  * @param certificateKnown (bool) certificateNotAfterUnixSeconds holds a
+  *        value read since boot. It is kept when a later read fails.
+  * @param certificateExpiring (bool) The certificate expires within
+  *        CERTIFICATE_WARNING_DAYS (or has expired); drives the melody.
+  * @param certificateCheckQueued (bool) A certificate read is due now.
+  * @param certificateNotAfterUnixSeconds (uint32_t) Expiry of the leaf
+  *        certificate, in Unix seconds.
+  * @param nextCertificateCheckAtMs (unsigned long) When the next scheduled
+  *        certificate read is due.
+  * @param certificateError (const char*) Static description of the last
+  *        failed certificate read, or an empty string.
   */
 struct ServiceState
 {
@@ -68,6 +128,15 @@ struct ServiceState
   unsigned long consecutiveFailures;
 
   const char *lastError;
+
+  bool certificateKnown;
+  bool certificateExpiring;
+  bool certificateCheckQueued;
+
+  uint32_t certificateNotAfterUnixSeconds;
+  unsigned long nextCertificateCheckAtMs;
+
+  const char *certificateError;
 };
 
 #endif

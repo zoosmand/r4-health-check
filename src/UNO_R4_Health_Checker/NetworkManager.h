@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : NetworkManager.h
+  * @brief          : Wi-Fi connection, reconnection, and outage tracking.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
@@ -20,7 +40,8 @@ class NetworkManager
 public:
   /**
     * @param ssid (const char*) Non-null network name; must outlive this object.
-    * @param password (const char*) Non-null passphrase; must outlive this object.
+    * @param password (const char*) Non-null passphrase; must outlive this
+    *        object.
     * @param reconnectIntervalMs (unsigned long) Minimum time between attempts.
     * @param connectTimeoutMs (unsigned long) How long one attempt blocks.
     * @param addressTimeoutMs (unsigned long) How long to wait for a DHCP
@@ -81,12 +102,29 @@ public:
     */
   IPAddress localIp() const;
 
+  /**
+    * @brief Signal strength of the current connection. Queries the Wi-Fi
+    *        module.
+    * @retval (long) RSSI in dBm.
+    */
   long rssi() const;
+
+  /**
+    * @brief Name of the current network. Queries the Wi-Fi module.
+    */
   String ssid() const;
 
+  /**
+    * @brief Print the SSID, IP address, and signal strength to the serial
+    *        log, or that Wi-Fi is not connected.
+    */
   void printStatus() const;
 
 private:
+  /**
+    * @brief Restart the connection: disconnect, then WiFi.begin(). Blocks
+    *        for up to connectTimeoutMs.
+    */
   void attemptConnection();
 
   /**

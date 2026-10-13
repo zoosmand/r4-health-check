@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : Watchdog.h
+  * @brief          : Hardware watchdog with main-loop supervision.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 27.09.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef WATCHDOG_H
 #define WATCHDOG_H
 
@@ -32,6 +52,9 @@
 class Watchdog
 {
 public:
+  /**
+    * @brief Create a stopped watchdog. Nothing runs before begin().
+    */
   Watchdog();
 
   /**
@@ -54,13 +77,20 @@ public:
   /**
     * @brief Stop refreshing the WDT so that it resets the MCU within one
     *        hardware period (~5.6 s) of CPU time awake. Irreversible; later
-    *        refresh() calls are ignored and PowerManager stops sleeping. When the WDT is not running, resets the MCU immediately
-    *        with NVIC_SystemReset(). Call from thread context only.
+    *        refresh() calls are ignored and PowerManager stops sleeping.
+    *        When the WDT is not running, resets the MCU immediately with
+    *        NVIC_SystemReset(). Call from thread context only.
     */
   void requestReset();
 
+  /**
+    * @brief Report whether requestReset() has been called.
+    */
   bool isResetRequested() const;
 
+  /**
+    * @brief Report whether begin() has started the hardware watchdog.
+    */
   bool isRunning() const;
 
   /**
@@ -90,6 +120,13 @@ public:
   static bool consumeWatchdogResetFlag();
 
 private:
+  /**
+    * @brief Supervisor interrupt: refreshes the WDT while the main loop has
+    *        checked in within the loop timeout and no reset is requested.
+    *        Interrupt context.
+    * @param args (timer_callback_args_t*) FSP callback arguments; p_context
+    *        is the Watchdog.
+    */
   static void timerCallback(timer_callback_args_t *args);
 
   FspTimer _timer;

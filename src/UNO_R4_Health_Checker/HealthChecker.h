@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : HealthChecker.h
+  * @brief          : Scheduler for HTTPS health checks and certificate reads.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef HEALTH_CHECKER_H
 #define HEALTH_CHECKER_H
 
@@ -6,15 +26,22 @@
 #include "AlarmController.h"
 #include "Heartbeat.h"
 #include "Watchdog.h"
+#include "UtcClock.h"
 
 /*
-  Sequential HTTPS health-check scheduler.
+  Sequential HTTPS health-check and certificate-expiry scheduler.
 
-  update() starts at most one check per call and blocks until that check has
-  finished (DNS, TLS connect, request, status line, headers). Each Wi-Fi
-  module call is bounded by the WiFiS3 modem timeout (10 s); the watchdog is
-  refreshed between those calls and inside the response wait loops. The
-  heartbeat LED is steady on while a check runs.
+  update() starts at most one job per call and blocks until it has finished:
+  either a health check (DNS, TLS connect, request, status line, headers) or
+  a certificate read (TCP connect, ClientHello, Certificate message; see
+  CertificateProbe.h). Health checks take precedence for the same service,
+  and a failing service's certificate reads are paused until it recovers.
+  Each Wi-Fi module call is bounded by the WiFiS3 modem timeout (10 s); the
+  watchdog is refreshed between those calls and inside the response wait
+  loops. The heartbeat LED is steady on while a job runs.
+
+  The HTTP Date header of every response sets the UTC clock, which turns the
+  certificate expiry dates into the certificate warning.
 */
 class HealthChecker
 {
@@ -35,6 +62,9 @@ public:
     Watchdog &watchdog
   );
 
+  /**
+    * @brief Release the service state table.
+    */
   ~HealthChecker();
 
   HealthChecker(const HealthChecker &) = delete;
@@ -46,14 +76,29 @@ public:
   void begin();
 
   /**
-    * @brief Run the next due check, if any. Call only while Wi-Fi is up.
-    *        Blocks for the duration of one check.
+    * @brief Refresh the certificate warning, then run the next due health
+    *        check or certificate read, if any. Call only while Wi-Fi is up.
+    *        Blocks for the duration of one job.
     */
   void update();
 
+  /**
+    * @brief Number of configured services, enabled or not.
+    */
   size_t serviceCount() const;
 
+  /**
+    * @brief Configuration of one service.
+    * @param index (size_t) Index below serviceCount().
+    * @retval (const ServiceConfig&) Entry of the service table.
+    */
   const ServiceConfig &configAt(size_t index) const;
+
+  /**
+    * @brief Runtime state of one service.
+    * @param index (size_t) Index below serviceCount().
+    * @retval (const ServiceState&) State, valid for the object's lifetime.
+    */
   const ServiceState &stateAt(size_t index) const;
 
   /**
@@ -63,10 +108,16 @@ public:
     */
   int findServiceIndex(const char *id) const;
 
+  /**
+    * @brief Request an immediate health check and certificate read of every
+    *        enabled service.
+    */
   void queueAll();
 
   /**
-    * @brief Request an immediate check of one service.
+    * @brief Request an immediate health check and certificate read of one
+    *        service. The certificate read waits while this service is
+    *        failing.
     * @param index (size_t) Service index.
     * @retval (bool) False when the index is invalid or the service disabled.
     */
@@ -79,14 +130,47 @@ public:
   size_t failingServiceCount() const;
 
   /**
+    * @brief Resource numbers of the enabled services at or above
+    *        FAILURE_THRESHOLD.
+    * @retval (uint8_t) Mask; bit (n - 1) stands for resource n.
+    */
+  uint8_t failingResourceMask() const;
+
+  /**
     * @brief Report whether every checked service passed its last check.
     * @retval (bool) False when no service has been checked yet.
     */
   bool allCheckedServicesHealthy() const;
 
+  /**
+    * @brief Count enabled services with at least one completed check.
+    */
   size_t checkedServiceCount() const;
 
+  /**
+    * @brief Count enabled services whose certificate is in the warning
+    *        window.
+    */
+  size_t expiringCertificateCount() const;
+
+  /**
+    * @brief Resource numbers of the enabled services whose certificate is in
+    *        the warning window.
+    * @retval (uint8_t) Mask; bit (n - 1) stands for resource n.
+    */
+  uint8_t expiringCertificateMask() const;
+
+  /**
+    * @brief Clock set from the HTTP Date headers of the health checks.
+    */
+  const UtcClock &clock() const;
+
 private:
+  /**
+    * @brief Run one health check, record its result, and log it. Blocks for
+    *        the duration of the check.
+    * @param index (size_t) Index of an enabled service.
+    */
   void performCheck(size_t index);
 
   /**
@@ -102,7 +186,22 @@ private:
     */
   void recordResult(size_t index, bool healthy);
 
+  /**
+    * @brief Pass the failing resources to the alarm controller.
+    */
   void refreshAlarmState();
+
+  /**
+    * @brief Read and record the certificate expiry of one service.
+    */
+  void performCertificateCheck(size_t index);
+
+  /**
+    * @brief Recompute certificateExpiring for every service from the clock
+    *        and update the alarm controller. Does nothing until the clock
+    *        is set.
+    */
+  void refreshCertificateWarning();
 
   const ServiceConfig *_configs;
   size_t _serviceCount;
@@ -111,6 +210,8 @@ private:
   AlarmController &_alarmController;
   Heartbeat &_heartbeat;
   Watchdog &_watchdog;
+
+  UtcClock _clock;
 
   size_t _roundRobinCursor;
   unsigned long _nextCheckAllowedAtMs;

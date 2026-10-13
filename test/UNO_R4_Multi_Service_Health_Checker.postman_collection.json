@@ -2,26 +2,9 @@
   "info": {
     "_postman_id": "37e2ec77-7303-4558-bd9e-19f3d3aaac31",
     "name": "UNO R4 Multi-Service Health Checker API",
-    "description": "API collection for the structured multi-service UNO R4 WiFi health checker.",
+    "description": "API collection for the UNO R4 WiFi multi-service health checker. Every endpoint is served under /api/v<version>/, where the version comes from src/UNO_R4_Health_Checker/.version.\n\nSelect the \"UNO R4 Health Checker\" environment (test/UNO_R4_Health_Checker.postman_environment.json) and set baseUrl, apiVersion, serviceId, deviceNumber, and apiToken there. GET requests need no token; POST requests send apiToken as a bearer token.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://192.168.1.50",
-      "type": "string"
-    },
-    {
-      "key": "serviceId",
-      "value": "secure",
-      "type": "string"
-    },
-    {
-      "key": "apiToken",
-      "value": "",
-      "type": "string"
-    }
-  ],
   "item": [
     {
       "name": "Status",
@@ -30,27 +13,38 @@
           "name": "Get Device Status",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{baseUrl}}/api/status"
+            "header": [],
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/status",
+            "description": "Device, Wi-Fi, alarm, certificate, and watchdog summary, including api_version.",
+            "auth": {
+              "type": "noauth"
+            }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('API version matches apiVersion', function () {",
+                  "  pm.expect(pm.response.json().api_version).to.eql(Number(pm.variables.get('apiVersion')));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Get All Services",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{baseUrl}}/api/services"
+            "header": [],
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/services",
+            "description": "All services with their state, including the resource number.",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": []
         },
@@ -58,13 +52,12 @@
           "name": "Get One Service",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{baseUrl}}/api/services/{{serviceId}}"
+            "header": [],
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/services/{{serviceId}}",
+            "description": "One service by its id.",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": []
         }
@@ -83,7 +76,8 @@
                 "value": "0"
               }
             ],
-            "url": "{{baseUrl}}/api/check"
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/check",
+            "description": "Queue a health check and a certificate read of every enabled service. Answers 202."
           },
           "response": []
         },
@@ -97,7 +91,8 @@
                 "value": "0"
               }
             ],
-            "url": "{{baseUrl}}/api/services/{{serviceId}}/check"
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/services/{{serviceId}}/check",
+            "description": "Queue a health check and a certificate read of one service. Answers 202, or 409 when the service is disabled."
           },
           "response": []
         }
@@ -107,7 +102,7 @@
       "name": "Buzzer",
       "item": [
         {
-          "name": "Test Buzzer",
+          "name": "SOS Alert Test",
           "request": {
             "method": "POST",
             "header": [
@@ -116,9 +111,107 @@
                 "value": "0"
               }
             ],
-            "url": "{{baseUrl}}/api/buzzer/test"
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/buzzer/alert",
+            "description": "Play the service alarm signal (SOS) once, even while the buzzer is silenced."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Alert test started', function () {",
+                  "  pm.expect(pm.response.json().result).to.eql('Alert test started');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SOS Alert Test for Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/buzzer/alert/{{deviceNumber}}",
+            "description": "Play the SOS followed by the counted beeps of one device number (1 to 5) once."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Alert test started', function () {",
+                  "  pm.expect(pm.response.json().result).to.eql('Alert test started');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Certificate Expiry Alert Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/buzzer/crtexp",
+            "description": "Play the certificate warning melody once, even while the buzzer is silenced."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Alert test started', function () {",
+                  "  pm.expect(pm.response.json().result).to.eql('Alert test started');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Certificate Expiry Alert Test for Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Length",
+                "value": "0"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/buzzer/crtexp/{{deviceNumber}}",
+            "description": "Play the certificate warning melody followed by the counted beeps of one device number (1 to 5) once."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Alert test started', function () {",
+                  "  pm.expect(pm.response.json().result).to.eql('Alert test started');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Silence Buzzer",
@@ -130,7 +223,8 @@
                 "value": "0"
               }
             ],
-            "url": "{{baseUrl}}/api/buzzer/silence"
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/buzzer/silence",
+            "description": "Silence the current alarm until a new fault appears."
           },
           "response": []
         },
@@ -144,7 +238,8 @@
                 "value": "0"
               }
             ],
-            "url": "{{baseUrl}}/api/buzzer/unsilence"
+            "url": "{{baseUrl}}/api/v{{apiVersion}}/buzzer/unsilence",
+            "description": "Re-enable the alarm sound."
           },
           "response": []
         }

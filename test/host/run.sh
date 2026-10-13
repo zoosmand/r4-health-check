@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 #
+# ******************************************************************************
+# @file           : run.sh
+# @brief          : Builds and runs the host-side unit tests.
+# @project        : UNO R4 WiFi Multi-Service Health Checker
+# @platform       : Host computer (bash)
+# @created        : 27.09.2026
+# ******************************************************************************
+# @attention
+#
+# Copyright (c) 2017-2026 Dmitry Slobodchikov
+# All rights reserved.
+#
+# This software is licensed under terms that can be found in the LICENSE file
+# in the root directory of this software component.
+# If no LICENSE file comes with this software, it is provided AS-IS.
+#
+# ******************************************************************************
+#
 # Build and run the host-side unit tests with the system C++ compiler.
 
 set -euo pipefail
@@ -25,3 +43,37 @@ mkdir -p "$OUT"
   -o "$OUT/heartbeat_pattern_test"
 
 "$OUT/heartbeat_pattern_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/utc_time_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/UtcTime.cpp" \
+  -o "$OUT/utc_time_test"
+
+"$OUT/utc_time_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/tls_certificate_parser_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/TlsCertificateParser.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/UtcTime.cpp" \
+  -o "$OUT/tls_certificate_parser_test"
+
+"$OUT/tls_certificate_parser_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/buzzer_melody_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/BuzzerMelody.cpp" \
+  -o "$OUT/buzzer_melody_test"
+
+"$OUT/buzzer_melody_test"
+
+"$CXX" -std=c++17 -Wall -Wextra -Werror -O1 -g \
+  -fsanitize=address,undefined \
+  "$ROOT/test/host/resource_alert_test.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/ResourceAlert.cpp" \
+  "$ROOT/src/UNO_R4_Health_Checker/BuzzerMelody.cpp" \
+  -o "$OUT/resource_alert_test"
+
+"$OUT/resource_alert_test"
