@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 #
+# ******************************************************************************
+# @file           : run.sh
+# @brief          : Builds and runs the host-side unit tests.
+# @project        : UNO R4 WiFi Multi-Service Health Checker
+# @platform       : Host computer (bash)
+# @created        : 27.09.2026
+# ******************************************************************************
+# @attention
+#
+# Copyright (c) 2017-2026 Dmitry Slobodchikov
+# All rights reserved.
+#
+# This software is licensed under terms that can be found in the LICENSE file
+# in the root directory of this software component.
+# If no LICENSE file comes with this software, it is provided AS-IS.
+#
+# ******************************************************************************
+#
 # Build and run the host-side unit tests with the system C++ compiler.
 
 set -euo pipefail

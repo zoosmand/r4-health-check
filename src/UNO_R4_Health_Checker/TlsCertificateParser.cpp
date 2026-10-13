@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : TlsCertificateParser.cpp
+  * @brief          : TLS ClientHello builder and certificate expiry parser.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "TlsCertificateParser.h"
 #include "UtcTime.h"
 
@@ -82,11 +102,18 @@ const uint16_t SIGNATURE_ALGORITHMS[] = {
 class RecordWriter
 {
 public:
+  /**
+    * @param buffer (uint8_t*) Output buffer; must outlive the writer.
+    * @param capacity (size_t) Size of buffer in bytes.
+    */
   RecordWriter(uint8_t *buffer, size_t capacity)
     : _buffer(buffer), _capacity(capacity), _length(0), _valid(true)
   {
   }
 
+  /**
+    * @brief Append the low byte of value.
+    */
   void put8(uint32_t value)
   {
     if (_length >= _capacity)
@@ -98,18 +125,27 @@ public:
     _buffer[_length++] = static_cast<uint8_t>(value);
   }
 
+  /**
+    * @brief Append the low 16 bits of value, most significant byte first.
+    */
   void put16(uint32_t value)
   {
     put8(value >> 8);
     put8(value);
   }
 
+  /**
+    * @brief Append the low 24 bits of value, most significant byte first.
+    */
   void put24(uint32_t value)
   {
     put8(value >> 16);
     put16(value);
   }
 
+  /**
+    * @brief Append length bytes from data.
+    */
   void putBytes(const void *data, size_t length)
   {
     const uint8_t *bytes = static_cast<const uint8_t *>(data);
@@ -120,6 +156,9 @@ public:
     }
   }
 
+  /**
+    * @brief Append a list of 16-bit values with its 16-bit byte length.
+    */
   void putList16(const uint16_t *values, size_t count)
   {
     put16(count * 2U);
@@ -165,11 +204,17 @@ public:
     }
   }
 
+  /**
+    * @brief Report whether every write fitted into the buffer.
+    */
   bool isValid() const
   {
     return _valid;
   }
 
+  /**
+    * @brief Number of bytes written.
+    */
   size_t length() const
   {
     return _length;
@@ -182,6 +227,13 @@ private:
   bool _valid;
 };
 
+/**
+  * @brief Check a host name for the SNI extension: 1 to 253 characters of
+  *        letters, digits, '-', and '.'.
+  * @param name (const char*) Host name; need not be NUL-terminated.
+  * @param length (size_t) Number of characters.
+  * @retval (bool) True when the name can be sent.
+  */
 bool isValidHostName(const char *name, size_t length)
 {
   if (length == 0 || length > 253)

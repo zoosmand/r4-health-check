@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : HealthChecker.h
+  * @brief          : Scheduler for HTTPS health checks and certificate reads.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef HEALTH_CHECKER_H
 #define HEALTH_CHECKER_H
 
@@ -42,6 +62,9 @@ public:
     Watchdog &watchdog
   );
 
+  /**
+    * @brief Release the service state table.
+    */
   ~HealthChecker();
 
   HealthChecker(const HealthChecker &) = delete;
@@ -59,9 +82,23 @@ public:
     */
   void update();
 
+  /**
+    * @brief Number of configured services, enabled or not.
+    */
   size_t serviceCount() const;
 
+  /**
+    * @brief Configuration of one service.
+    * @param index (size_t) Index below serviceCount().
+    * @retval (const ServiceConfig&) Entry of the service table.
+    */
   const ServiceConfig &configAt(size_t index) const;
+
+  /**
+    * @brief Runtime state of one service.
+    * @param index (size_t) Index below serviceCount().
+    * @retval (const ServiceState&) State, valid for the object's lifetime.
+    */
   const ServiceState &stateAt(size_t index) const;
 
   /**
@@ -71,6 +108,10 @@ public:
     */
   int findServiceIndex(const char *id) const;
 
+  /**
+    * @brief Request an immediate health check and certificate read of every
+    *        enabled service.
+    */
   void queueAll();
 
   /**
@@ -101,6 +142,9 @@ public:
     */
   bool allCheckedServicesHealthy() const;
 
+  /**
+    * @brief Count enabled services with at least one completed check.
+    */
   size_t checkedServiceCount() const;
 
   /**
@@ -122,6 +166,11 @@ public:
   const UtcClock &clock() const;
 
 private:
+  /**
+    * @brief Run one health check, record its result, and log it. Blocks for
+    *        the duration of the check.
+    * @param index (size_t) Index of an enabled service.
+    */
   void performCheck(size_t index);
 
   /**
@@ -137,6 +186,9 @@ private:
     */
   void recordResult(size_t index, bool healthy);
 
+  /**
+    * @brief Pass the failing resources to the alarm controller.
+    */
   void refreshAlarmState();
 
   /**

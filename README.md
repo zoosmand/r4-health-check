@@ -393,6 +393,12 @@ See [test/README](test/README) for details.
   Certificate expiry is read separately (see
   [Certificate expiry](#certificate-expiry)).
 
+## License
+
+This project is free software, licensed under the
+[GNU General Public License v3.0](LICENSE). You may redistribute and modify it
+under the terms of that license. It comes with no warranty.
+
 ---
 
 &copy; 2017-2026, Dmitry Slobodchikov

@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : UtcClock.h
+  * @brief          : Wall-clock time set from HTTP Date headers.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef UTC_CLOCK_H
 #define UTC_CLOCK_H
 
@@ -19,6 +39,9 @@
 class UtcClock
 {
 public:
+  /**
+    * @brief Create a clock that is not set.
+    */
   UtcClock();
 
   /**

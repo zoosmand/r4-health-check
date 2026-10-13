@@ -1,4 +1,22 @@
-// Host-side unit tests for src/UNO_R4_Health_Checker/ResourceAlert.cpp. Run with test/host/run.sh.
+/**
+  ******************************************************************************
+  * @file           : resource_alert_test.cpp
+  * @brief          : Host tests for ResourceAlert (test/host/run.sh).
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Host computer (C++17 unit tests)
+  * @created        : 13.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 
 #include "../../src/UNO_R4_Health_Checker/ResourceAlert.h"
 
@@ -38,6 +56,12 @@ static const ResourceAlertPattern PATTERN = {
 constexpr uint8_t RESOURCE_2 = getResourceBit(2);
 constexpr uint8_t RESOURCE_3 = getResourceBit(3);
 
+/**
+  * @brief Frequency of PATTERN at a position.
+  * @param mask (uint8_t) Resources to count.
+  * @param positionMs (unsigned long) Time since the alert started.
+  * @retval (uint16_t) Frequency, or 0 while silent.
+  */
 static uint16_t frequencyAt(uint8_t mask, unsigned long positionMs)
 {
   uint16_t frequencyHz = 0xFFFF;
@@ -68,6 +92,9 @@ static int countBeeps(uint8_t mask, unsigned long fromMs, unsigned long toMs)
   return beeps;
 }
 
+/**
+  * @brief Mask bits of valid and out-of-range resource numbers.
+  */
 static void testResourceBit()
 {
   EXPECT(getResourceBit(0) == 0);
@@ -76,6 +103,9 @@ static void testResourceBit()
   EXPECT(getResourceBit(MAX_RESOURCE_NUMBER + 1) == 0);
 }
 
+/**
+  * @brief Alert length for no, one, and two resources, ignoring invalid bits.
+  */
 static void testDuration()
 {
   // Prefix only.
@@ -91,6 +121,9 @@ static void testDuration()
   EXPECT(getResourceAlertDurationMs(PATTERN, 0xE0) == 150);
 }
 
+/**
+  * @brief Prefix, pauses, and counted beeps at their exact positions.
+  */
 static void testLayout()
 {
   const uint8_t mask = RESOURCE_2 | RESOURCE_3;
@@ -126,6 +159,9 @@ static void testLayout()
   EXPECT(frequencyHz == 0);
 }
 
+/**
+  * @brief Each resource number from 1 to 5 is beeped that many times.
+  */
 static void testEveryResourceCount()
 {
   for (uint8_t number = 1; number <= MAX_RESOURCE_NUMBER; number++)
@@ -135,6 +171,9 @@ static void testEveryResourceCount()
   }
 }
 
+/**
+  * @brief An alert plays at once and then once per interval.
+  */
 static void testScheduleRepeatsEveryInterval()
 {
   ResourceAlertSchedule schedule(PATTERN, 1000);
@@ -155,6 +194,10 @@ static void testScheduleRepeatsEveryInterval()
   EXPECT(frequencyHz == 1000);
 }
 
+/**
+  * @brief A resource that fails during an alert is named right after it,
+  *        without changing the alert in progress.
+  */
 static void testScheduleAnnouncesNewResourceAfterCurrentAlert()
 {
   ResourceAlertSchedule schedule(PATTERN, 1000);
@@ -174,6 +217,9 @@ static void testScheduleAnnouncesNewResourceAfterCurrentAlert()
   EXPECT(!schedule.update(RESOURCE_2 | RESOURCE_3, 320 + 540, frequencyHz));
 }
 
+/**
+  * @brief A resource that recovers and fails again is announced at once.
+  */
 static void testScheduleReannouncesRecoveredResource()
 {
   ResourceAlertSchedule schedule(PATTERN, 1000);
@@ -190,6 +236,10 @@ static void testScheduleReannouncesRecoveredResource()
   EXPECT(frequencyHz == 1000);
 }
 
+/**
+  * @brief Clearing every resource stops the schedule; the next one plays at
+  *        once.
+  */
 static void testScheduleRestartsAfterClear()
 {
   ResourceAlertSchedule schedule(PATTERN, 1000);
@@ -203,6 +253,9 @@ static void testScheduleRestartsAfterClear()
   EXPECT(frequencyHz == 1000);
 }
 
+/**
+  * @brief The schedule keeps its timing across a millis() wrap-around.
+  */
 static void testScheduleAcrossMillisWrap()
 {
   ResourceAlertSchedule schedule(PATTERN, 1000);
@@ -216,6 +269,9 @@ static void testScheduleAcrossMillisWrap()
   EXPECT(schedule.update(RESOURCE_2, start + 1000, frequencyHz));
 }
 
+/**
+  * @brief An interval shorter than the alert does not cut the alert short.
+  */
 static void testIntervalShorterThanAlert()
 {
   // The alert finishes before the next one starts.
@@ -227,6 +283,10 @@ static void testIntervalShorterThanAlert()
   EXPECT(frequencyHz == 2000);
 }
 
+/**
+  * @brief Run every test and print the totals.
+  * @retval (int) 0 when every expectation held, 1 otherwise.
+  */
 int main()
 {
   testResourceBit();

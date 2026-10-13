@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : UtcTime.cpp
+  * @brief          : UTC date conversion, parsing, and formatting.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "UtcTime.h"
 
 #include <stdio.h>
@@ -5,11 +25,20 @@
 
 namespace
 {
+/**
+  * @brief Report whether a year of the Gregorian calendar is a leap year.
+  */
 bool isLeapYear(int year)
 {
   return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
 }
 
+/**
+  * @brief Number of days in a month.
+  * @param year (int) Calendar year.
+  * @param month (int) Month from 1 to 12.
+  * @retval (int) 28 to 31.
+  */
 int daysInMonth(int year, int month)
 {
   static const int DAYS[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};

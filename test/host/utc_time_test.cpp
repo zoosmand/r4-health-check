@@ -1,4 +1,22 @@
-// Host-side unit tests for src/UNO_R4_Health_Checker/UtcTime.cpp. Run with test/host/run.sh.
+/**
+  ******************************************************************************
+  * @file           : utc_time_test.cpp
+  * @brief          : Host tests for UtcTime (test/host/run.sh).
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Host computer (C++17 unit tests)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 
 #include "../../src/UNO_R4_Health_Checker/UtcTime.h"
 
@@ -20,6 +38,9 @@ static int checks = 0;
     }                                                                        \
   } while (0)
 
+/**
+  * @brief Civil dates to Unix seconds, leap years, and invalid dates.
+  */
 static void testMakeUnixSeconds()
 {
   uint32_t value = 1;
@@ -43,6 +64,9 @@ static void testMakeUnixSeconds()
   EXPECT(!makeUnixSeconds(2026, 1, 1, 0, 0, 61, value));
 }
 
+/**
+  * @brief IMF-fixdate parsing and malformed Date headers.
+  */
 static void testParseHttpDate()
 {
   uint32_t value = 0;
@@ -63,6 +87,9 @@ static void testParseHttpDate()
   EXPECT(!parseHttpDate("Sun, 0x Nov 1994 08:49:37 GMT", value));
 }
 
+/**
+  * @brief UTCTime and GeneralizedTime parsing and malformed times.
+  */
 static void testParseAsn1Time()
 {
   uint32_t value = 0;
@@ -83,6 +110,9 @@ static void testParseAsn1Time()
   EXPECT(!parseAsn1Time("2026122023595Z", 14, value));
 }
 
+/**
+  * @brief ISO 8601 formatting and too-small buffers.
+  */
 static void testFormatIsoUtc()
 {
   char text[24];
@@ -100,6 +130,9 @@ static void testFormatIsoUtc()
   EXPECT(!formatIsoUtc(0, text, 20) && text[0] == '\0');
 }
 
+/**
+  * @brief Whole days left, rounded down, including expired times.
+  */
 static void testDaysUntil()
 {
   const uint32_t now = 1791504000UL;
@@ -115,6 +148,10 @@ static void testDaysUntil()
   EXPECT(daysUntil(0, 4294967295UL) == -49711);
 }
 
+/**
+  * @brief Run every test and print the totals.
+  * @retval (int) 0 when every expectation held, 1 otherwise.
+  */
 int main()
 {
   testMakeUnixSeconds();

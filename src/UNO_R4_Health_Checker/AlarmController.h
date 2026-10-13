@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : AlarmController.h
+  * @brief          : Passive buzzer driver: alarm patterns, SOS, and melodies.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef ALARM_CONTROLLER_H
 #define ALARM_CONTROLLER_H
 
@@ -102,6 +122,11 @@ public:
     *        (n - 1) stands for resource n.
     */
   void setCertificateWarning(uint8_t expiringResources);
+
+  /**
+    * @brief Report whether any certificate is in the warning window.
+    * @retval (bool) True while at least one resource is set.
+    */
   bool isCertificateWarningActive() const;
 
   /**
@@ -110,11 +135,34 @@ public:
     * @retval (bool) True when the service or network alarm is active.
     */
   bool isAlarmActive() const;
+
+  /**
+    * @brief Report whether at least one service is failing.
+    * @retval (bool) True while the service alarm is active.
+    */
   bool isServiceAlarmActive() const;
+
+  /**
+    * @brief Report whether the Wi-Fi outage alarm is active.
+    * @retval (bool) True while the network alarm is active.
+    */
   bool isNetworkAlarmActive() const;
 
+  /**
+    * @brief Mute the alarms and the certificate warning until unsilence() or
+    *        a new fault. The tests still sound.
+    */
   void silence();
+
+  /**
+    * @brief Re-enable the alarm sound after silence().
+    */
   void unsilence();
+
+  /**
+    * @brief Report whether the buzzer is silenced.
+    * @retval (bool) True after silence() until it is cancelled.
+    */
   bool isSilenced() const;
 
   /**
@@ -122,6 +170,11 @@ public:
     *        as the self-test beep at boot.
     */
   void startTest();
+
+  /**
+    * @brief Report whether the self-test beep is sounding.
+    * @retval (bool) True for BUZZER_TEST_DURATION_MS after startTest().
+    */
   bool isTestActive() const;
 
   /**
@@ -133,6 +186,11 @@ public:
     *        resource n; 0 plays the signal only.
     */
   void startAlertTest(AlertTest alert, uint8_t resourceMask);
+
+  /**
+    * @brief Report whether an alert test is playing.
+    * @retval (bool) True from startAlertTest() until the alert ends.
+    */
   bool isAlertTestActive() const;
 
   /**
@@ -141,6 +199,12 @@ public:
   void setHardwareFaultPattern();
 
 private:
+  /**
+    * @brief Pattern timer interrupt; forwards to tick() of the instance.
+    *        Interrupt context.
+    * @param args (timer_callback_args_t*) FSP callback arguments; p_context
+    *        is the AlarmController.
+    */
   static void timerCallback(timer_callback_args_t *args);
 
   /**
@@ -149,6 +213,12 @@ private:
     */
   void tick();
 
+  /**
+    * @brief Sound the alarm tone or silence the buzzer. Interrupt context
+    *        only.
+    * @param enabled (bool) True to sound the tone at the constructor's
+    *        frequency.
+    */
   void writeOutput(bool enabled);
 
   /**

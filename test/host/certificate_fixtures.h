@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : certificate_fixtures.h
+  * @brief          : Self-signed P-256 test certificates for the parser tests.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Host computer (C++17 unit tests)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 // Self-signed P-256 test certificates for tls_certificate_parser_test.cpp.
 // Generated with LibreSSL 3.3.6; they contain no private key.
 

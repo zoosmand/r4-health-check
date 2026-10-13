@@ -1,4 +1,22 @@
-// Host-side unit tests for src/UNO_R4_Health_Checker/TlsCertificateParser.cpp. Run with test/host/run.sh.
+/**
+  ******************************************************************************
+  * @file           : tls_certificate_parser_test.cpp
+  * @brief          : Host tests for TlsCertificateParser (test/host/run.sh).
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Host computer (C++17 unit tests)
+  * @created        : 09.10.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 
 #include "../../src/UNO_R4_Health_Checker/TlsCertificateParser.h"
 #include "certificate_fixtures.h"
@@ -28,6 +46,9 @@ typedef std::vector<uint8_t> Bytes;
 static const uint32_t V1_NOT_AFTER = 2106914219UL;
 static const uint32_t V3_NOT_AFTER = 2569154235UL;
 
+/**
+  * @brief Append a 24-bit big-endian length.
+  */
 static void append24(Bytes &out, size_t value)
 {
   out.push_back(static_cast<uint8_t>(value >> 16));
@@ -35,6 +56,9 @@ static void append24(Bytes &out, size_t value)
   out.push_back(static_cast<uint8_t>(value));
 }
 
+/**
+  * @brief Build a handshake message: type, 24-bit length, and body.
+  */
 static Bytes handshakeMessage(uint8_t type, const Bytes &body)
 {
   Bytes out;
@@ -44,6 +68,9 @@ static Bytes handshakeMessage(uint8_t type, const Bytes &body)
   return out;
 }
 
+/**
+  * @brief Build a minimal TLS 1.2 ServerHello message.
+  */
 static Bytes serverHello()
 {
   // version, random, empty session id, cipher suite, compression.
@@ -56,6 +83,10 @@ static Bytes serverHello()
   return handshakeMessage(2, body);
 }
 
+/**
+  * @brief Build a Certificate message with the given leaf and an issuer
+  *        certificate.
+  */
 static Bytes certificateMessage(const uint8_t *leaf, size_t leafLength)
 {
   // The leaf followed by a second (issuer) certificate, as servers send.
@@ -92,6 +123,11 @@ static Bytes toRecords(const Bytes &handshake, size_t fragmentSize)
   return out;
 }
 
+/**
+  * @brief Build the server's answer to a ClientHello (ServerHello, Certificate,
+  *        ServerHelloDone) as handshake records.
+  * @param fragmentSize (size_t) Largest record payload.
+  */
 static Bytes serverFlight(const uint8_t *leaf, size_t leafLength, size_t fragmentSize)
 {
   Bytes handshake = serverHello();
@@ -104,6 +140,10 @@ static Bytes serverFlight(const uint8_t *leaf, size_t leafLength, size_t fragmen
   return toRecords(handshake, fragmentSize);
 }
 
+/**
+  * @brief Feed data to the parser in chunks of chunkSize bytes.
+  * @retval (CertificateParseStatus) Status after the last chunk.
+  */
 static CertificateParseStatus feedInChunks(
   TlsCertificateParser &parser,
   const Bytes &data,
@@ -121,6 +161,9 @@ static CertificateParseStatus feedInChunks(
   return status;
 }
 
+/**
+  * @brief notAfter of a v1 and a v3 certificate from a complete server answer.
+  */
 static void testRealCertificates()
 {
   TlsCertificateParser parser;
@@ -136,6 +179,9 @@ static void testRealCertificates()
   EXPECT(parser.notAfterUnixSeconds() == V3_NOT_AFTER);
 }
 
+/**
+  * @brief Same result for every record fragment size and read chunk size.
+  */
 static void testFragmentation()
 {
   // Every combination of record fragment size and read chunk size must give
@@ -156,6 +202,11 @@ static void testFragmentation()
   }
 }
 
+/**
+  * @brief Parsing completes exactly at the last byte of notAfter, and bytes
+  *        after
+  *        completion are ignored.
+  */
 static void testIncompleteInput()
 {
   const Bytes flight = serverFlight(V1_CERTIFICATE, sizeof(V1_CERTIFICATE), 16384);
@@ -179,6 +230,9 @@ static void testIncompleteInput()
   EXPECT(parser.notAfterUnixSeconds() == V1_NOT_AFTER);
 }
 
+/**
+  * @brief A TLS alert from the server fails with "TLS alert from server".
+  */
 static void testAlert()
 {
   // fatal protocol_version, as a TLS 1.3-only server answers.
@@ -189,6 +243,9 @@ static void testAlert()
   EXPECT(std::strcmp(parser.errorText(), "TLS alert from server") == 0);
 }
 
+/**
+  * @brief A plaintext HTTP answer fails as not TLS.
+  */
 static void testNotTls()
 {
   const char response[] = "HTTP/1.1 400 Bad Request\r\n\r\n";
@@ -199,6 +256,9 @@ static void testNotTls()
   EXPECT(std::strcmp(parser.errorText(), "Not a TLS handshake response") == 0);
 }
 
+/**
+  * @brief ServerHelloDone without a Certificate message fails.
+  */
 static void testNoCertificate()
 {
   Bytes handshake = serverHello();
@@ -212,6 +272,9 @@ static void testNoCertificate()
   EXPECT(std::strcmp(parser.errorText(), "Server sent no certificate") == 0);
 }
 
+/**
+  * @brief A leaf certificate that ends before notAfter fails.
+  */
 static void testTruncatedCertificate()
 {
   // A leaf that ends inside the issuer name.
@@ -226,6 +289,9 @@ static void testTruncatedCertificate()
   EXPECT(std::strcmp(parser.errorText(), "Certificate ends before notAfter") == 0);
 }
 
+/**
+  * @brief A leaf certificate with a wrong DER tag fails.
+  */
 static void testMalformedCertificate()
 {
   Bytes leaf(V1_CERTIFICATE, V1_CERTIFICATE + sizeof(V1_CERTIFICATE));
@@ -240,6 +306,9 @@ static void testMalformedCertificate()
   EXPECT(std::strcmp(parser.errorText(), "Malformed certificate") == 0);
 }
 
+/**
+  * @brief A record longer than TLS allows fails.
+  */
 static void testInvalidRecordLength()
 {
   const Bytes record = {22, 0x03, 0x03, 0x48, 0x01};
@@ -249,6 +318,9 @@ static void testInvalidRecordLength()
   EXPECT(std::strcmp(parser.errorText(), "Invalid TLS record length") == 0);
 }
 
+/**
+  * @brief ClientHello layout: record, version, random, SNI, and lengths.
+  */
 static void testClientHello()
 {
   uint8_t random[TLS_RANDOM_LENGTH];
@@ -305,6 +377,9 @@ static void testClientHello()
   EXPECT(walked == extensionsLength);
 }
 
+/**
+  * @brief ClientHello rejects invalid host names and a too-small buffer.
+  */
 static void testClientHelloLimits()
 {
   uint8_t random[TLS_RANDOM_LENGTH] = {};
@@ -331,6 +406,10 @@ static void testClientHelloLimits()
   EXPECT(buildTlsClientHello(tooLong, random, buffer, sizeof(buffer)) == 0);
 }
 
+/**
+  * @brief Run every test and print the totals.
+  * @retval (int) 0 when every expectation held, 1 otherwise.
+  */
 int main()
 {
   testRealCertificates();

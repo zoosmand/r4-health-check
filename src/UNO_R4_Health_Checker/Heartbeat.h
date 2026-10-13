@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : Heartbeat.h
+  * @brief          : Heartbeat LED and restart after a long Wi-Fi outage.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 28.09.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #ifndef HEARTBEAT_H
 #define HEARTBEAT_H
 

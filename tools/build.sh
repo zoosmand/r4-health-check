@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 #
+# ******************************************************************************
+# @file           : build.sh
+# @brief          : Compiles the firmware and optionally uploads it.
+# @project        : UNO R4 WiFi Multi-Service Health Checker
+# @platform       : Host computer (bash)
+# @created        : 27.09.2026
+# ******************************************************************************
+# @attention
+#
+# Copyright (c) 2017-2026 Dmitry Slobodchikov
+# All rights reserved.
+#
+# This software is licensed under terms that can be found in the LICENSE file
+# in the root directory of this software component.
+# If no LICENSE file comes with this software, it is provided AS-IS.
+#
+# ******************************************************************************
+#
 # Compile the firmware with arduino-cli.
 #
 # The sketch lives in src/UNO_R4_Health_Checker/ and is compiled in place.

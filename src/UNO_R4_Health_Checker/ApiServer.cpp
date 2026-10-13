@@ -1,3 +1,23 @@
+/**
+  ******************************************************************************
+  * @file           : ApiServer.cpp
+  * @brief          : JSON HTTP API, versioned under /api/v<N>/.
+  * @project        : UNO R4 WiFi Multi-Service Health Checker
+  * @platform       : Arduino UNO R4 WiFi (Renesas RA4M1)
+  * @created        : 05.08.2026
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017-2026 Dmitry Slobodchikov
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
 #include "ApiServer.h"
 #include "ApiVersion.h"
 #include "AppConfig.h"
@@ -15,6 +35,10 @@ constexpr char CERTIFICATE_ALERT_ROUTE[] = "/buzzer/crtexp";
 constexpr char CHECK_SUFFIX[] = "/check";
 constexpr size_t ISO_TIME_CAPACITY = 24;
 
+/**
+  * @brief Time left of a budget that started at startedAt.
+  * @retval (unsigned long) Remaining milliseconds, or 0 when expired.
+  */
 unsigned long remainingMs(unsigned long startedAt, unsigned long budgetMs)
 {
   const unsigned long elapsed = millis() - startedAt;
